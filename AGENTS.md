@@ -38,7 +38,8 @@ Các quy tắc dưới đây áp dụng cho mọi tác vụ trong dự án này.
 - Giải thích lý do lựa chọn. Đánh dấu mẫu còn lại để dọn dẹp sau.
 - Không trộn lẫn các mẫu thiết kế mâu thuẫn với nhau.
 
-## Quy tắc 8 — Đọc trước khi viết (Read before you write)
+## Quy tắc 8 — Đọc trước khi viết và luôn cập nhật code mới (Read & Pull before you write)
+- **Luôn bắt đầu tác vụ bằng việc tải mã nguồn mới**: Trước khi làm bất cứ việc gì hoặc chỉnh sửa mã nguồn, AI Agent bắt buộc phải chạy lệnh `git pull` để đồng bộ code mới nhất từ GitHub về máy local.
 - Trước khi thêm mã mới, hãy đọc các phần export, các hàm gọi trực tiếp (immediate callers), và các tiện ích dùng chung.
 - Suy nghĩ "trông có vẻ độc lập/không liên quan" là rất nguy hiểm. Nếu không chắc tại sao mã được cấu trúc như vậy, hãy hỏi.
 
