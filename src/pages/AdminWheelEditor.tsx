@@ -1908,6 +1908,55 @@ export const AdminWheelEditor: React.FC = () => {
                   </select>
                 </div>
 
+                {themePreset === 'custom' && (
+                  <div className="form-group" style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', backgroundColor: 'rgba(15, 61, 46, 0.03)', borderRadius: '12px', border: '1.5px dashed rgba(216, 180, 63, 0.4)', marginTop: '4px' }}>
+                    <label style={{ color: 'var(--color-primary)', fontWeight: '700', fontSize: '14px', marginBottom: 0 }}>🎨 Danh sách mã màu tùy biến (Hex, cách nhau bằng dấu phẩy)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={customColors}
+                      onChange={(e) => setCustomColors(e.target.value)}
+                      placeholder="#EF4444,#10B981,#F59E0B,#3B82F6"
+                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', height: '40px', backgroundColor: '#FFFFFF' }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', width: '100%', fontWeight: '600' }}>Gợi ý các bảng màu tươi sáng & hiện đại:</span>
+                      <button
+                        type="button"
+                        onClick={() => setCustomColors('#FF5E36,#FFAE33,#E24E82,#7C3AED,#3B82F6')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer', backgroundColor: '#FFFFFF' }}
+                      >
+                        🌅 Hoàng hôn rực rỡ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomColors('#0D9488,#14B8A6,#06B6D4,#3B82F6,#6366F1')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer', backgroundColor: '#FFFFFF' }}
+                      >
+                        💎 Ngọc lục bảo mát lạnh
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomColors('#F472B6,#FBBF24,#34D399,#60A5FA,#A78BFA')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer', backgroundColor: '#FFFFFF' }}
+                      >
+                        🌸 Hoa cỏ mùa xuân (Pastel)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomColors('#EC4899,#8B5CF6,#3B82F6,#10B981,#F59E0B')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer', backgroundColor: '#FFFFFF' }}
+                      >
+                        ⚡ Neon tương phản
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label htmlFor="lock-duration" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>Khóa Lộc đã nhận</label>
                   <select
@@ -2386,63 +2435,14 @@ export const AdminWheelEditor: React.FC = () => {
               </div>
             </div>
 
-            {/* Custom Labels & Color Palette Card */}
-            <div className="card" style={{ border: '1px solid rgba(216, 180, 63, 0.25)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.04)' }}>
-              <h3 className="text-serif" style={{ fontSize: '16px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(15, 61, 46, 0.08)', paddingBottom: '10px', marginBottom: '16px', fontWeight: '800' }}>
-                <Settings size={18} style={{ color: 'var(--color-gold)' }} />
-                <span>Cấu hình nhãn chữ & Màu sắc Tùy biến</span>
-              </h3>
+             {/* Custom Labels Card */}
+             <div className="card" style={{ border: '1px solid rgba(216, 180, 63, 0.25)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.04)' }}>
+               <h3 className="text-serif" style={{ fontSize: '16px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(15, 61, 46, 0.08)', paddingBottom: '10px', marginBottom: '16px', fontWeight: '800' }}>
+                 <Settings size={18} style={{ color: 'var(--color-gold)' }} />
+                 <span>Cấu hình nhãn chữ nút bấm & thông báo</span>
+               </h3>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {/* Custom Colors Option (Only shown if themePreset is 'custom') */}
-                {themePreset === 'custom' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px', borderBottom: '1px dashed rgba(15, 61, 46, 0.08)' }}>
-                    <label style={{ color: 'var(--color-primary)', fontWeight: '700', fontSize: '14px' }}>🎨 Danh sách mã màu tùy biến (Hex, cách nhau bằng dấu phẩy)</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={customColors}
-                      onChange={(e) => setCustomColors(e.target.value)}
-                      placeholder="#EF4444,#10B981,#F59E0B,#3B82F6"
-                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', height: '40px' }}
-                    />
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-                      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', width: '100%', fontWeight: '600' }}>Gợi ý các bảng màu tươi sáng & hiện đại:</span>
-                      <button
-                        type="button"
-                        onClick={() => setCustomColors('#FF5E36,#FFAE33,#E24E82,#7C3AED,#3B82F6')}
-                        className="btn btn-secondary"
-                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
-                      >
-                        🌅 Hoàng hôn rực rỡ
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomColors('#0D9488,#14B8A6,#06B6D4,#3B82F6,#6366F1')}
-                        className="btn btn-secondary"
-                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
-                      >
-                        💎 Ngọc lục bảo mát lạnh
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomColors('#F472B6,#FBBF24,#34D399,#60A5FA,#A78BFA')}
-                        className="btn btn-secondary"
-                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
-                      >
-                        🌸 Hoa cỏ mùa xuân (Pastel)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomColors('#EC4899,#8B5CF6,#3B82F6,#10B981,#F59E0B')}
-                        className="btn btn-secondary"
-                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
-                      >
-                        ⚡ Neon tương phản
-                      </button>
-                    </div>
-                  </div>
-                )}
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                 {/* Spin center buttons text customize */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', paddingBottom: '16px', borderBottom: '1px dashed rgba(15, 61, 46, 0.08)' }}>
