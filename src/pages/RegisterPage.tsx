@@ -106,7 +106,9 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    if (!invitationCode || invitationCode.length !== 6) {
+    const requireInviteCode = import.meta.env.VITE_REQUIRE_INVITE_CODE !== 'false';
+
+    if (requireInviteCode && (!invitationCode || invitationCode.length !== 6)) {
       setError('Mã mời xác thực phải chứa đúng 6 chữ số.');
       return;
     }
@@ -122,7 +124,7 @@ export const RegisterPage: React.FC = () => {
       }
 
       // Step A: Call backend to verify invitation code
-      if (supabase) {
+      if (requireInviteCode && supabase) {
         const verifyRes = await fetch('/api/verify-invite', {
           method: 'POST',
           headers: {
@@ -330,22 +332,24 @@ export const RegisterPage: React.FC = () => {
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="invitationCode" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-              Mã mời xác thực (2FA)
-            </label>
-            <input
-              id="invitationCode"
-              type="text"
-              className="form-control"
-              placeholder="Nhập mã mời 6 chữ số từ Admin"
-              maxLength={6}
-              value={invitationCode}
-              onChange={(e) => setInvitationCode(e.target.value.replace(/[^0-9]/g, ''))}
-              required
-              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)', letterSpacing: '2px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}
-            />
-          </div>
+          {import.meta.env.VITE_REQUIRE_INVITE_CODE !== 'false' && (
+            <div className="form-group">
+              <label htmlFor="invitationCode" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+                Mã mời xác thực (2FA)
+              </label>
+              <input
+                id="invitationCode"
+                type="text"
+                className="form-control"
+                placeholder="Nhập mã mời 6 chữ số từ Admin"
+                maxLength={6}
+                value={invitationCode}
+                onChange={(e) => setInvitationCode(e.target.value.replace(/[^0-9]/g, ''))}
+                required
+                style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)', letterSpacing: '2px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}
+              />
+            </div>
+          )}
 
           <button
             type="submit"

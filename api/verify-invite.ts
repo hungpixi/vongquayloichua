@@ -72,6 +72,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const requireInvite = process.env.VITE_REQUIRE_INVITE_CODE !== 'false' && process.env.REQUIRE_INVITE_CODE !== 'false';
+    if (!requireInvite) {
+      return res.status(200).json({ success: true, message: 'Mã mời được bỏ qua (bypass)!' });
+    }
+
     const { code } = (req.body || {}) as { code?: string };
     if (!code) {
       return res.status(400).json({ error: 'Thiếu mã mời xác thực.' });

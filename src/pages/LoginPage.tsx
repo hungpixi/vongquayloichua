@@ -93,7 +93,7 @@ export const LoginPage: React.FC = () => {
             </label>
             <input
               id="email"
-              type="email"
+              type="text"
               className="form-control"
               placeholder="cha-xu@gmail.com"
               value={email}
