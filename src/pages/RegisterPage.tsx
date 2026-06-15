@@ -18,6 +18,7 @@ export const RegisterPage: React.FC = () => {
   const [pastorTitle, setPastorTitle] = useState('');
   const [invitationCode, setInvitationCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [regType, setRegType] = useState<'parish' | 'group'>('parish');
   
   // Slug live validation states
   const [checkingSlug, setCheckingSlug] = useState(false);
@@ -96,7 +97,7 @@ export const RegisterPage: React.FC = () => {
     }
 
     if (!pastorName.trim()) {
-      setError('Vui lòng nhập Họ và tên Linh mục.');
+      setError(regType === 'parish' ? 'Vui lòng nhập Họ và tên Linh mục.' : 'Vui lòng nhập Họ và tên Người đại diện / Cá nhân.');
       return;
     }
 
@@ -106,7 +107,7 @@ export const RegisterPage: React.FC = () => {
     }
 
     if (!pastorTitle.trim()) {
-      setError('Vui lòng nhập Chức vụ tôn giáo.');
+      setError(regType === 'parish' ? 'Vui lòng nhập Chức vụ tôn giáo.' : 'Vui lòng nhập Chức vụ / Vai trò.');
       return;
     }
 
@@ -192,11 +193,61 @@ export const RegisterPage: React.FC = () => {
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
           <Church size={44} style={{ color: 'var(--color-primary)' }} />
           <h2 className="text-serif" style={{ fontSize: '26px', color: 'var(--color-primary)', fontWeight: '800' }}>
-            Đăng ký Tài khoản Hội đoàn
+            {regType === 'parish' ? 'Đăng ký Giáo xứ & Cha xứ' : 'Đăng ký Hội đoàn & Cá nhân'}
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
             Khởi tạo hệ thống vòng quay Lộc Chúa miễn phí 100%
           </p>
+        </div>
+
+        {/* Account Type Selection Tabs */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '8px',
+          background: 'rgba(15, 61, 46, 0.03)',
+          padding: '4px',
+          borderRadius: '10px',
+          border: '1.5px solid rgba(15, 61, 46, 0.08)'
+        }}>
+          <button
+            type="button"
+            onClick={() => setRegType('parish')}
+            style={{
+              padding: '10px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: '700',
+              fontFamily: 'inherit',
+              transition: 'all 0.2s ease',
+              backgroundColor: regType === 'parish' ? 'var(--color-primary)' : 'transparent',
+              color: regType === 'parish' ? '#FFFFFF' : 'var(--color-text-muted)',
+              boxShadow: regType === 'parish' ? '0 2px 6px rgba(15, 61, 46, 0.15)' : 'none'
+            }}
+          >
+            Giáo xứ / Cha xứ
+          </button>
+          <button
+            type="button"
+            onClick={() => setRegType('group')}
+            style={{
+              padding: '10px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: '700',
+              fontFamily: 'inherit',
+              transition: 'all 0.2s ease',
+              backgroundColor: regType === 'group' ? 'var(--color-primary)' : 'transparent',
+              color: regType === 'group' ? '#FFFFFF' : 'var(--color-text-muted)',
+              boxShadow: regType === 'group' ? '0 2px 6px rgba(15, 61, 46, 0.15)' : 'none'
+            }}
+          >
+            Hội đoàn & Cá nhân
+          </button>
         </div>
 
         {error && (
@@ -208,13 +259,13 @@ export const RegisterPage: React.FC = () => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div className="form-group">
             <label htmlFor="parishName" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-              Tên Giáo xứ / Cộng đoàn
+              {regType === 'parish' ? 'Tên Giáo xứ / Cộng đoàn' : 'Tên Hội đoàn / Nhóm / Tổ chức / Cá nhân'}
             </label>
             <input
               id="parishName"
               type="text"
               className="form-control"
-              placeholder="Ví dụ: Giáo xứ Châu Sơn"
+              placeholder={regType === 'parish' ? 'Ví dụ: Giáo xứ Châu Sơn' : 'Ví dụ: Ca đoàn Cecilia, TNTT X, Cá nhân Giuse A...'}
               value={parishName}
               onChange={handleParishNameChange}
               required
@@ -267,13 +318,13 @@ export const RegisterPage: React.FC = () => {
 
           <div className="form-group">
             <label htmlFor="pastorName" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-              Họ và tên Linh mục
+              {regType === 'parish' ? 'Họ và tên Linh mục' : 'Họ và tên Người đại diện / Cá nhân'}
             </label>
             <input
               id="pastorName"
               type="text"
               className="form-control"
-              placeholder="Ví dụ: Lm. Giuse Nguyễn Văn A"
+              placeholder={regType === 'parish' ? 'Ví dụ: Lm. Giuse Nguyễn Văn A' : 'Ví dụ: Nguyễn Văn A'}
               value={pastorName}
               onChange={(e) => setPastorName(e.target.value)}
               required
@@ -299,13 +350,13 @@ export const RegisterPage: React.FC = () => {
 
           <div className="form-group">
             <label htmlFor="pastorTitle" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-              Chức vụ tôn giáo
+              {regType === 'parish' ? 'Chức vụ tôn giáo' : 'Chức danh / Vai trò'}
             </label>
             <input
               id="pastorTitle"
               type="text"
               className="form-control"
-              placeholder="Ví dụ: Linh mục Quản xứ"
+              placeholder={regType === 'parish' ? 'Ví dụ: Linh mục Quản xứ' : 'Ví dụ: Ca trưởng, Trưởng ban, Cá nhân...'}
               value={pastorTitle}
               onChange={(e) => setPastorTitle(e.target.value)}
               required
