@@ -297,7 +297,7 @@ export const LandingPage: React.FC = () => {
               <Settings size={28} style={{ color: 'var(--color-primary)', marginBottom: '16px' }} />
               <h3 className="text-serif" style={{ fontSize: '19px', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '10px' }}>Khởi tạo tài khoản</h3>
               <p style={{ fontSize: '13.5px', color: 'var(--color-text-muted)', lineHeight: '1.6' }}>
-                Đăng ký tài khoản Giáo xứ của bạn, điền tên Giáo xứ và đường dẫn slug mong muốn để tạo thương hiệu White-label riêng biệt.
+                Đăng ký tài khoản Hội đoàn của bạn, điền tên Giáo xứ và đường dẫn slug mong muốn để tạo thương hiệu White-label riêng biệt.
               </p>
             </div>
 

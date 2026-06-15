@@ -192,7 +192,7 @@ export const RegisterPage: React.FC = () => {
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
           <Church size={44} style={{ color: 'var(--color-primary)' }} />
           <h2 className="text-serif" style={{ fontSize: '26px', color: 'var(--color-primary)', fontWeight: '800' }}>
-            Đăng ký Tài khoản Giáo xứ
+            Đăng ký Tài khoản Hội đoàn
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
             Khởi tạo hệ thống vòng quay Lộc Chúa miễn phí 100%
