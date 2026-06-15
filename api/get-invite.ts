@@ -103,18 +103,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const secret = process.env.INVITATION_SECRET || 'vqlc_invitation_secret_key_2026';
-    const now = Date.now();
-    const currentBlock = Math.floor(now / STEP_MS);
-    const code = generateCode(secret, currentBlock);
-    
-    const nextBlockTime = (currentBlock + 1) * STEP_MS;
-    const secondsRemaining = Math.max(0, Math.ceil((nextBlockTime - now) / 1000));
+    const staticCode = process.env.STATIC_INVITE_CODE || process.env.INVITATION_SECRET || 'vqlc2026';
 
     return res.status(200).json({
       success: true,
-      code,
-      secondsRemaining
+      code: staticCode,
+      isStatic: true
     });
 
   } catch (err: unknown) {

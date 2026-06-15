@@ -82,23 +82,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Thiếu mã mời xác thực.' });
     }
 
-    const secret = process.env.INVITATION_SECRET || 'vqlc_invitation_secret_key_2026';
-    const now = Date.now();
-    const currentBlock = Math.floor(now / STEP_MS);
+    const staticCode = process.env.STATIC_INVITE_CODE || process.env.INVITATION_SECRET || 'vqlc2026';
+    const cleanCode = code.trim().toLowerCase();
+    const cleanStaticCode = staticCode.trim().toLowerCase();
 
-    // Generate codes for current and previous block to allow time drift
-    const validCode1 = generateCode(secret, currentBlock);
-    const validCode2 = generateCode(secret, currentBlock - 1);
-
-    const cleanCode = code.trim();
-
-    if (cleanCode === validCode1 || cleanCode === validCode2) {
+    if (cleanCode === cleanStaticCode) {
       return res.status(200).json({ success: true, message: 'Mã mời hợp lệ!' });
     }
 
     return res.status(400).json({ 
       success: false, 
-      error: 'Mã mời không chính xác hoặc đã hết hạn (Mã tự động đổi mỗi 15 phút).' 
+      error: 'Mã mời không chính xác.' 
     });
 
   } catch (err: unknown) {

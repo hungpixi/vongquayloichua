@@ -108,8 +108,8 @@ export const RegisterPage: React.FC = () => {
 
     const requireInviteCode = import.meta.env.VITE_REQUIRE_INVITE_CODE !== 'false';
 
-    if (requireInviteCode && (!invitationCode || invitationCode.length !== 6)) {
-      setError('Mã mời xác thực phải chứa đúng 6 chữ số.');
+    if (requireInviteCode && !invitationCode.trim()) {
+      setError('Vui lòng nhập mã mời xác thực.');
       return;
     }
 
@@ -349,18 +349,29 @@ export const RegisterPage: React.FC = () => {
           {import.meta.env.VITE_REQUIRE_INVITE_CODE !== 'false' && (
             <div className="form-group">
               <label htmlFor="invitationCode" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-                Mã mời xác thực (2FA)
+                Mã mời xác thực
               </label>
               <input
                 id="invitationCode"
                 type="text"
                 className="form-control"
-                placeholder="Nhập mã mời 6 chữ số từ Admin"
-                maxLength={6}
+                placeholder="Nhập mã mời của Giáo phận (Ví dụ: vqlc2026)"
                 value={invitationCode}
-                onChange={(e) => setInvitationCode(e.target.value.replace(/[^0-9]/g, ''))}
+                onChange={(e) => setInvitationCode(e.target.value.trim())}
                 required
-                style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)', letterSpacing: '2px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}
+                style={{
+                  height: '44px',
+                  border: '1.5px solid rgba(15, 61, 46, 0.18)',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: 'var(--color-primary)',
+                  backgroundColor: 'rgba(216, 180, 63, 0.02)',
+                  letterSpacing: '1px',
+                  outline: 'none',
+                  transition: 'all 0.2s'
+                }}
               />
             </div>
           )}

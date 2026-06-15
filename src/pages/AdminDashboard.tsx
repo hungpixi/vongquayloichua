@@ -188,6 +188,7 @@ export const AdminDashboard: React.FC = () => {
   const [inviteCode, setInviteCode] = useState<string>('');
   const [inviteRemaining, setInviteRemaining] = useState<number>(0);
   const [inviteLoading, setInviteLoading] = useState<boolean>(false);
+  const [inviteIsStatic, setInviteIsStatic] = useState<boolean>(false);
 
   // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -522,22 +523,25 @@ export const AdminDashboard: React.FC = () => {
 
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       if (response.status === 404 && isLocal) {
-        setInviteCode('091595');
-        setInviteRemaining(900); // 15 minutes mock
+        setInviteCode('vqlc2026');
+        setInviteIsStatic(true);
         return;
       }
 
       const data = await response.json();
       if (data.success) {
         setInviteCode(data.code);
-        setInviteRemaining(data.secondsRemaining);
+        setInviteIsStatic(!!data.isStatic);
+        if (!data.isStatic) {
+          setInviteRemaining(data.secondsRemaining);
+        }
       }
     } catch (err) {
       console.error('Lỗi lấy mã mời:', err);
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       if (isLocal) {
-        setInviteCode('091595');
-        setInviteRemaining(900);
+        setInviteCode('vqlc2026');
+        setInviteIsStatic(true);
       }
     } finally {
       setInviteLoading(false);
@@ -1077,7 +1081,7 @@ export const AdminDashboard: React.FC = () => {
           </li>
         </ul>
 
-        {/* 2FA Invitation Code Widget */}
+        {/* 2FA/Static Invitation Code Widget */}
         {import.meta.env.VITE_REQUIRE_INVITE_CODE !== 'false' && (
           <div style={{
             margin: '16px 16px 8px 16px',
@@ -1114,14 +1118,14 @@ export const AdminDashboard: React.FC = () => {
                 borderRadius: '50%', 
                 backgroundColor: '#10B981'
               }}></span>
-              Mã mời 2FA (15 Phút)
+              {inviteIsStatic ? 'Mã mời Giáo xứ (Cố định)' : 'Mã mời 2FA (15 Phút)'}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               {inviteLoading && !inviteCode ? (
                 <Loader className="animate-spin" size={20} style={{ color: 'var(--color-gold)' }} />
               ) : (
-                <span style={{ fontSize: '22px', fontFamily: 'monospace', fontWeight: '800', color: 'var(--color-primary)', letterSpacing: '2px' }}>
+                <span style={{ fontSize: '20px', fontFamily: 'monospace', fontWeight: '800', color: 'var(--color-primary)', letterSpacing: '1px' }}>
                   {inviteCode || '------'}
                 </span>
               )}
@@ -1151,13 +1155,15 @@ export const AdminDashboard: React.FC = () => {
               )}
             </div>
 
-            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-              {inviteRemaining > 0 ? (
-                <span>Đổi mã mới sau {Math.floor(inviteRemaining / 60)}:{(inviteRemaining % 60).toString().padStart(2, '0')}</span>
-              ) : (
-                <span>Đang cập nhật mã...</span>
-              )}
-            </div>
+            {!inviteIsStatic && (
+              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                {inviteRemaining > 0 ? (
+                  <span>Đổi mã mới sau {Math.floor(inviteRemaining / 60)}:{(inviteRemaining % 60).toString().padStart(2, '0')}</span>
+                ) : (
+                  <span>Đang cập nhật mã...</span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
