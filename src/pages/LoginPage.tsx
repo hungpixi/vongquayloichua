@@ -49,7 +49,14 @@ export const LoginPage: React.FC = () => {
       navigate('/admin');
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Mã OTP không chính xác hoặc đã hết hạn.');
+      const msg = err instanceof Error 
+        ? err.message 
+        : typeof err === 'object' && err !== null && 'message' in err 
+        ? String((err as Record<string, unknown>).message) 
+        : typeof err === 'string'
+        ? err
+        : 'Mã OTP không chính xác hoặc đã hết hạn.';
+      setError(msg);
       setShake(true);
       setTimeout(() => setShake(false), 500);
       setOtp(Array(6).fill(''));
@@ -158,7 +165,14 @@ export const LoginPage: React.FC = () => {
       }, 100);
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Gửi mã OTP thất bại. Vui lòng thử lại.');
+      const msg = err instanceof Error 
+        ? err.message 
+        : typeof err === 'object' && err !== null && 'message' in err 
+        ? String((err as Record<string, unknown>).message) 
+        : typeof err === 'string'
+        ? err
+        : 'Gửi mã OTP thất bại. Vui lòng thử lại.';
+      setError(msg);
     } finally {
       setLoading(false);
     }

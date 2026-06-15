@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { User, Session } from '@supabase/supabase-js';
+import type { User, Session, Subscription } from '@supabase/supabase-js';
 import { dbService } from '../services/db';
 import type { Parish, LocalUser } from '../services/db';
 import { supabase } from '../services/supabaseClient';
@@ -64,8 +64,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           setCurrentParishState(null);
         }
-      } catch (err) {
-        console.error('Error refreshing parishes:', err);
+      } catch (err: unknown) {
+        console.error('Error refreshing parishes:', err instanceof Error ? err.message : String(err));
       }
     } else {
       setParishes([]);
@@ -93,7 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let isMounted = true;
-    let authListener: { unsubscribe: () => void } | null = null;
+    let authListener: Subscription | null = null;
 
     const fetchUserData = async () => {
       try {
@@ -139,8 +139,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setParishes([]);
           setCurrentParishState(null);
         }
-      } catch (err) {
-        console.error('Error fetching auth data:', err);
+      } catch (err: unknown) {
+        console.error('Error fetching auth data:', err instanceof Error ? err.message : String(err));
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -172,8 +172,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   setCurrentParishState(null);
                 }
               }
-            } catch (err) {
-              console.error('Error fetching parishes on auth state change:', err);
+            } catch (err: unknown) {
+              console.error('Error fetching parishes on auth state change:', err instanceof Error ? err.message : String(err));
             }
           }
         } else if (event === 'SIGNED_OUT') {
@@ -189,12 +189,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setUser(anonData.user);
               }
             }
-          } catch (anonErr) {
-            console.error('Failed to sign in anonymously after sign out:', anonErr);
+          } catch (anonErr: unknown) {
+            console.error('Failed to sign in anonymously after sign out:', anonErr instanceof Error ? anonErr.message : String(anonErr));
           }
         }
       });
-      authListener = data.subscription;
+      authListener = data?.subscription || null;
     }
 
     return () => {

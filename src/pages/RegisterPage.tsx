@@ -124,7 +124,14 @@ export const RegisterPage: React.FC = () => {
       }
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Đăng ký tài khoản thất bại.');
+      const msg = err instanceof Error 
+        ? err.message 
+        : typeof err === 'object' && err !== null && 'message' in err 
+        ? String((err as Record<string, unknown>).message) 
+        : typeof err === 'string'
+        ? err
+        : 'Đăng ký tài khoản thất bại.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -139,7 +146,14 @@ export const RegisterPage: React.FC = () => {
       navigate('/admin');
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Lỗi kích hoạt thử nghiệm.');
+      const msg = err instanceof Error 
+        ? err.message 
+        : typeof err === 'object' && err !== null && 'message' in err 
+        ? String((err as Record<string, unknown>).message) 
+        : typeof err === 'string'
+        ? err
+        : 'Lỗi kích hoạt thử nghiệm.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
