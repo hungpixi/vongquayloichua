@@ -755,11 +755,33 @@ export const dbService = {
     greeting?: string;
   }) {
     if (isOnline()) {
+      const { data: currentParish } = await supabase!
+        .from('parishes')
+        .select('slug')
+        .eq('id', parishId)
+        .maybeSingle();
+
       const { error } = await supabase!
         .from('parishes')
         .update({ ...fields, updated_at: new Date().toISOString() })
         .eq('id', parishId);
       if (error) throw error;
+
+      if (currentParish && currentParish.slug && fields.slug && fields.slug !== currentParish.slug) {
+        const wheelsList = await this.getWheels(parishId);
+        for (const w of wheelsList) {
+          const oldFilePath = `${currentParish.slug}/${w.slug}.json`;
+          await supabase!.storage
+            .from('configs')
+            .remove([oldFilePath])
+            .catch((err: unknown) => console.warn('Failed to delete old config JSON during updateParish slug change:', err));
+        }
+      }
+
+      const wheelsList = await this.getWheels(parishId);
+      for (const w of wheelsList) {
+        await this.syncWheelToStorage(w.id);
+      }
     } else {
       const parishes = getLocalData<Parish>('local_parishes');
       const idx = parishes.findIndex(p => p.id === parishId);
@@ -866,6 +888,42 @@ export const dbService = {
     }
   },
 
+  async syncWheelToStorage(wheelId: string): Promise<void> {
+    if (!isOnline()) return;
+    try {
+      const res = await this.getWheelById(wheelId);
+      if (!res) return;
+      
+      const { parish, wheel } = res;
+      const blessings = await this.getBlessings(wheelId);
+      
+      const consolidatedConfig = {
+        parish,
+        wheel,
+        blessings
+      };
+
+      const jsonStr = JSON.stringify(consolidatedConfig, null, 2);
+      const fileBlob = new Blob([jsonStr], { type: 'application/json' });
+      const filePath = `${parish.slug}/${wheel.slug}.json`;
+
+      const { error: uploadError } = await supabase!.storage
+        .from('configs')
+        .upload(filePath, fileBlob, {
+          contentType: 'application/json',
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error(`Failed to sync wheel ${wheelId} to storage:`, uploadError);
+      } else {
+        console.log(`Successfully synced wheel ${wheelId} to storage path: ${filePath}`);
+      }
+    } catch (err) {
+      console.error(`Error in syncWheelToStorage for wheel ${wheelId}:`, err);
+    }
+  },
+
   async createWheel(
     parishId: string, 
     title: string, 
@@ -936,7 +994,12 @@ export const dbService = {
          .select()
          .single();
        if (error) throw error;
-       return mapDBWheelToWheel(data);
+
+       const created = mapDBWheelToWheel(data);
+
+       await this.syncWheelToStorage(created.id);
+
+       return created;
     } else {
       const wheels = getLocalData<Wheel>('local_wheels');
       // check unique in parish
@@ -964,15 +1027,27 @@ export const dbService = {
     }
   },
 
-  async updateWheel(wheelId: string, fields: Partial<Omit<Wheel, 'id' | 'parish_id'>>) {
+  async updateWheel(wheelId: string, fields: Partial<Omit<Wheel, 'id' | 'parish_id'>>, skipStorageSync = false) {
     if (isOnline()) {
        const { data: current, error: fetchErr } = await supabase!
          .from('wheels')
-         .select('*')
+         .select('*, parishes(slug)')
          .eq('id', wheelId)
          .maybeSingle();
        if (fetchErr) throw fetchErr;
        if (!current) throw new Error('Không tìm thấy vòng quay cần cập nhật.');
+
+       const oldSlug = current.config?.slug || current.slug;
+       if (fields.slug && oldSlug && fields.slug !== oldSlug) {
+         const parishSlug = current.parishes?.slug;
+         if (parishSlug) {
+           const oldFilePath = `${parishSlug}/${oldSlug}.json`;
+           await supabase!.storage
+             .from('configs')
+             .remove([oldFilePath])
+             .catch((err: unknown) => console.warn('Failed to delete old config JSON during updateWheel:', err));
+         }
+       }
 
        const existingConfig = current.config || {};
        const columnsPayload: Record<string, unknown> = {
@@ -1006,7 +1081,15 @@ export const dbService = {
          })
          .eq('id', wheelId);
        if (error) throw error;
-    } else {
+    
+
+      if (!skipStorageSync) {
+
+        await this.syncWheelToStorage(wheelId);
+
+      }
+
+      } else {
       const wheels = getLocalData<Wheel>('local_wheels');
       const idx = wheels.findIndex(w => w.id === wheelId);
       if (idx !== -1) {
@@ -1059,12 +1142,22 @@ export const dbService = {
   },
 
   async deleteWheelSoft(wheelId: string) {
+    const res = await this.getWheelById(wheelId);
     if (isOnline()) {
       const { error } = await supabase!
         .from('wheels')
         .update({ is_active: false })
         .eq('id', wheelId);
       if (error) throw error;
+
+      if (res) {
+        const { parish, wheel } = res;
+        const filePath = `${parish.slug}/${wheel.slug}.json`;
+        await supabase!.storage
+          .from('configs')
+          .remove([filePath])
+          .catch((err: unknown) => console.warn('Failed to delete config JSON for deleted wheel:', err));
+      }
     } else {
       const wheels = getLocalData<Wheel>('local_wheels');
       const idx = wheels.findIndex(w => w.id === wheelId);
@@ -1091,7 +1184,7 @@ export const dbService = {
     }
   },
 
-  async saveBlessings(wheelId: string, blessingsList: Omit<Blessing, 'id' | 'wheel_id'>[]) {
+  async saveBlessings(wheelId: string, blessingsList: Omit<Blessing, 'id' | 'wheel_id'>[], skipStorageSync = false) {
     const baseTime = new Date();
     if (isOnline()) {
       // 1. Delete old blessings
@@ -1116,6 +1209,10 @@ export const dbService = {
           .insert(payload);
         if (insertError) throw insertError;
       }
+      
+      if (!skipStorageSync) {
+        await this.syncWheelToStorage(wheelId);
+      }
     } else {
       const blessings = getLocalData<Blessing>('local_blessings');
       // Delete old
@@ -1139,7 +1236,8 @@ export const dbService = {
   // Import quick templates
   async loadDefaultBlessingsPreset(
     wheelId: string, 
-    presetType: 'gifts' | 'tet' | 'christmas' | 'easter' | 'lent' | 'advent' | 'marian' | 'joseph' | 'eucharist'
+    presetType: 'gifts' | 'tet' | 'christmas' | 'easter' | 'lent' | 'advent' | 'marian' | 'joseph' | 'eucharist',
+    skipStorageSync = false
   ) {
     let list;
     if (presetType === 'gifts') {
@@ -1207,7 +1305,7 @@ export const dbService = {
       }));
     }
 
-    await this.saveBlessings(wheelId, list);
+    await this.saveBlessings(wheelId, list, true);
 
     // Đồng bộ theme và card template tương ứng với presetType
     const themePreset = presetType === 'gifts' ? 'pentecost' : presetType;
@@ -1216,7 +1314,11 @@ export const dbService = {
     await this.updateWheel(wheelId, {
       theme_preset: themePreset,
       card_template: cardTemplate
-    });
+    }, true);
+
+    if (!skipStorageSync) {
+      await this.syncWheelToStorage(wheelId);
+    }
   },
 
   // --- SPIN HISTORY OPERATIONS ---

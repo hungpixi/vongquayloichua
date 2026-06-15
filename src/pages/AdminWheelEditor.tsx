@@ -1596,7 +1596,7 @@ export const AdminWheelEditor: React.FC = () => {
         recheck_btn_text: recheckBtnText,
         locked_desc: lockedDesc,
         custom_colors: customColors
-      });
+      }, true);
 
       // 2. Format và lưu blessings
       const parsedBlessingsList = finalBlessings.map(b => ({
@@ -1606,7 +1606,7 @@ export const AdminWheelEditor: React.FC = () => {
         is_custom: true
       }));
 
-      await dbService.saveBlessings(wheelId, parsedBlessingsList);
+      await dbService.saveBlessings(wheelId, parsedBlessingsList, true);
 
       // Build and upload consolidated JSON config
       if (supabase) {
