@@ -519,6 +519,14 @@ export const AdminDashboard: React.FC = () => {
           'Content-Type': 'application/json'
         }
       });
+
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (response.status === 404 && isLocal) {
+        setInviteCode('091595');
+        setInviteRemaining(900); // 15 minutes mock
+        return;
+      }
+
       const data = await response.json();
       if (data.success) {
         setInviteCode(data.code);
@@ -526,6 +534,11 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (err) {
       console.error('Lỗi lấy mã mời:', err);
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocal) {
+        setInviteCode('091595');
+        setInviteRemaining(900);
+      }
     } finally {
       setInviteLoading(false);
     }

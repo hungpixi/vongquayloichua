@@ -125,17 +125,31 @@ export const RegisterPage: React.FC = () => {
 
       // Step A: Call backend to verify invitation code
       if (requireInviteCode && supabase) {
-        const verifyRes = await fetch('/api/verify-invite', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ code: invitationCode }),
-        });
+        try {
+          const verifyRes = await fetch('/api/verify-invite', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ code: invitationCode }),
+          });
 
-        const verifyData = await verifyRes.json();
-        if (!verifyRes.ok || !verifyData.success) {
-          throw new Error(verifyData.error || 'Mã mời không chính xác hoặc đã hết hạn.');
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          if (verifyRes.status === 404 && isLocal) {
+            console.warn('[Local Dev] API /api/verify-invite returned 404. Bypassing invite code check for easier local testing.');
+          } else {
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok || !verifyData.success) {
+              throw new Error(verifyData.error || 'Mã mời không chính xác hoặc đã hết hạn.');
+            }
+          }
+        } catch (err) {
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+          if (isLocal) {
+            console.warn('[Local Dev] Failed to call verify-invite API, bypassing for local testing:', err);
+          } else {
+            throw err;
+          }
         }
       }
 
