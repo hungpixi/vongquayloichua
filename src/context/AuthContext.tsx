@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { User } from '@supabase/supabase-js';
+import type { User, Session } from '@supabase/supabase-js';
 import { dbService } from '../services/db';
 import type { Parish, LocalUser } from '../services/db';
 import { supabase } from '../services/supabaseClient';
@@ -12,10 +12,22 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, parishName: string, slug: string) => Promise<void>;
+  signInWithOtp: (email: string, shouldCreateUser?: boolean) => Promise<void>;
+  verifyOtp: (email: string, token: string, type: 'signup' | 'magiclink') => Promise<void>;
   signOut: () => Promise<void>;
   setCurrentParish: (parish: Parish | null) => void;
   refreshParishes: () => Promise<void>;
   createParish: (name: string, slug: string) => Promise<Parish>;
+  sendOtpToEmail: (
+    email: string,
+    redirectUrl?: string,
+    shouldCreateUser?: boolean
+  ) => Promise<{ success: boolean; error: string | null }>;
+  verifyOtpCode: (
+    email: string,
+    token: string,
+    type: 'signup' | 'magiclink'
+  ) => Promise<{ success: boolean; session: Session | null; error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -81,19 +93,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let isMounted = true;
+    let authListener: { unsubscribe: () => void } | null = null;
+
     const fetchUserData = async () => {
       try {
-        let currentUser = await dbService.getSessionUser();
-        if (!isMounted) return;
+        let currentUser: User | LocalUser | null = null;
+        
+        if (supabase) {
+          const { data: { session } } = await supabase.auth.getSession();
+          currentUser = session?.user || null;
+        } else {
+          const activeUser = localStorage.getItem('local_active_user');
+          currentUser = activeUser ? JSON.parse(activeUser) : null;
+        }
 
-        // Nếu không có người dùng đăng nhập, thực hiện đăng nhập ẩn danh bằng Supabase (nếu có sẵn)
-        if (currentUser === null) {
+        if (currentUser === null && supabase) {
           try {
-            if (supabase) {
-              const { data, error } = await supabase.auth.signInAnonymously();
-              if (!error && data?.user) {
-                currentUser = data.user;
-              }
+            const { data, error } = await supabase.auth.signInAnonymously();
+            if (!error && data?.user) {
+              currentUser = data.user;
             }
           } catch (anonErr) {
             console.error('Failed to sign in anonymously (falling back to local user):', anonErr);
@@ -129,9 +147,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     };
+
     fetchUserData();
+
+    if (supabase) {
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!isMounted) return;
+        
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          const supabaseUser = session?.user || null;
+          if (supabaseUser) {
+            setUser(supabaseUser);
+            try {
+              const list = await dbService.getParishesByOwner(supabaseUser.id);
+              if (isMounted) {
+                setParishes(list);
+                const savedId = localStorage.getItem('active_parish_id');
+                if (savedId && list.some(p => p.id === savedId)) {
+                  const found = list.find(p => p.id === savedId) || null;
+                  setCurrentParishState(found);
+                } else if (list.length > 0) {
+                  setCurrentParishState(list[0]);
+                } else {
+                  setCurrentParishState(null);
+                }
+              }
+            } catch (err) {
+              console.error('Error fetching parishes on auth state change:', err);
+            }
+          }
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setParishes([]);
+          setCurrentParishState(null);
+          localStorage.removeItem('active_parish_id');
+
+          try {
+            if (supabase) {
+              const { data: anonData, error } = await supabase.auth.signInAnonymously();
+              if (!error && anonData?.user && isMounted) {
+                setUser(anonData.user);
+              }
+            }
+          } catch (anonErr) {
+            console.error('Failed to sign in anonymously after sign out:', anonErr);
+          }
+        }
+      });
+      authListener = data.subscription;
+    }
+
     return () => {
       isMounted = false;
+      if (authListener) {
+        authListener.unsubscribe();
+      }
     };
   }, []);
 
@@ -139,7 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       const loggedUser = await dbService.signIn(email, password);
-      setUser(loggedUser);
+      setUser(loggedUser || null);
       
       const list = await dbService.getParishesByOwner(loggedUser.id);
       setParishes(list);
@@ -162,7 +232,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(true);
     try {
       const registeredUser = await dbService.signUp(email, password, parishName, slug);
-      setUser(registeredUser);
+      setUser(registeredUser || null);
       
       const list = await dbService.getParishesByOwner(registeredUser.id);
       setParishes(list);
@@ -176,7 +246,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     }
   };
-
   const signOut = async () => {
     setLoading(true);
     try {
@@ -190,6 +259,158 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const sendOtpToEmail = async (
+    email: string,
+    redirectUrl: string = window.location.origin + '/admin/auth/callback',
+    shouldCreateUser: boolean = false
+  ): Promise<{ success: boolean; error: string | null }> => {
+    if (!supabase) {
+      return { success: true, error: null };
+    }
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: redirectUrl,
+          shouldCreateUser: shouldCreateUser
+        }
+      });
+
+      if (error) {
+        console.error('Lỗi gửi OTP/Magic Link:', error.message);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, error: null };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg || 'Unknown error occurred' };
+    }
+  };
+
+  const verifyOtpCode = async (
+    email: string,
+    token: string,
+    type: 'signup' | 'magiclink'
+  ): Promise<{ success: boolean; session: Session | null; error: string | null }> => {
+    if (!supabase) {
+      try {
+        const data = await dbService.verifyOtp(email, token, type);
+        const loggedUser = data.user;
+        setUser(loggedUser || null);
+        if (loggedUser) {
+          const list = await dbService.getParishesByOwner(loggedUser.id);
+          setParishes(list);
+          
+          const savedId = localStorage.getItem('active_parish_id');
+          if (savedId && list.some(p => p.id === savedId)) {
+            const found = list.find(p => p.id === savedId) || null;
+            setCurrentParishState(found);
+          } else if (list.length > 0) {
+            setCurrentParishState(list[0]);
+          } else {
+            setCurrentParishState(null);
+          }
+        }
+        return { success: true, session: null, error: null };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, session: null, error: msg || 'Unknown error occurred' };
+      }
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: type
+      });
+
+      if (error) {
+        console.error('Lỗi xác thực OTP:', error.message);
+        return { success: false, session: null, error: error.message };
+      }
+
+      if (data?.session?.user) {
+        const loggedUser = data.session.user;
+        setUser(loggedUser);
+        
+        const list = await dbService.getParishesByOwner(loggedUser.id);
+        setParishes(list);
+        
+        const savedId = localStorage.getItem('active_parish_id');
+        if (savedId && list.some(p => p.id === savedId)) {
+          const found = list.find(p => p.id === savedId) || null;
+          setCurrentParishState(found);
+        } else if (list.length > 0) {
+          setCurrentParishState(list[0]);
+        } else {
+          setCurrentParishState(null);
+        }
+      }
+
+      return { success: true, session: data.session, error: null };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, session: null, error: msg || 'Unknown error occurred' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInWithOtp = async (email: string, shouldCreateUser: boolean = false): Promise<void> => {
+    setLoading(true);
+    try {
+      if (!supabase) {
+        await dbService.signInWithOtp(email, window.location.origin + '/admin/auth/callback', shouldCreateUser);
+        return;
+      }
+
+      const res = await sendOtpToEmail(email, window.location.origin + '/admin/auth/callback', shouldCreateUser);
+      if (!res.success) {
+        throw new Error(res.error || 'Gửi mã OTP thất bại');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOtp = async (email: string, token: string, type: 'signup' | 'magiclink'): Promise<void> => {
+    setLoading(true);
+    try {
+      if (!supabase) {
+        const data = await dbService.verifyOtp(email, token, type);
+        const loggedUser = data.user;
+        setUser(loggedUser || null);
+        if (loggedUser) {
+          const list = await dbService.getParishesByOwner(loggedUser.id);
+          setParishes(list);
+          
+          const savedId = localStorage.getItem('active_parish_id');
+          if (savedId && list.some(p => p.id === savedId)) {
+            const found = list.find(p => p.id === savedId) || null;
+            setCurrentParishState(found);
+          } else if (list.length > 0) {
+            setCurrentParishState(list[0]);
+          } else {
+            setCurrentParishState(null);
+          }
+        }
+        return;
+      }
+
+      const res = await verifyOtpCode(email, token, type);
+      if (!res.success) {
+        throw new Error(res.error || 'Mã OTP không chính xác hoặc đã hết hạn');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   return (
     <AuthContext.Provider value={{ 
       user, 
@@ -199,10 +420,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading, 
       signIn, 
       signUp, 
+      signInWithOtp,
+      verifyOtp,
       signOut, 
       setCurrentParish,
       refreshParishes,
-      createParish
+      createParish,
+      sendOtpToEmail,
+      verifyOtpCode
     }}>
       {children}
     </AuthContext.Provider>

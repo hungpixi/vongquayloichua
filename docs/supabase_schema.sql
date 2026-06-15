@@ -271,3 +271,97 @@ CREATE POLICY "Allow parish owners to select spin_history"
 -- Note: UPDATE and DELETE operations are restricted on spin_history.
 -- By default, since no UPDATE/DELETE policies are defined, all edit/delete actions are rejected.
 -- This guarantees the immutability of spin history logs.
+
+
+-- ==========================================
+-- 5. AUTOMATIC PARISH CREATION TRIGGER
+-- ==========================================
+-- Automatically creates a parish profile when a new admin user signs up.
+-- Extracts parish details from user metadata and handles slug duplicate collisions.
+
+CREATE OR REPLACE FUNCTION public.handle_new_admin_user()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_parish_name TEXT;
+    v_parish_slug TEXT;
+    v_is_anonymous BOOLEAN;
+    v_clean_slug TEXT;
+    v_counter INTEGER := 1;
+BEGIN
+    -- 1. Determine if the user is anonymous (Parishioner / Guest)
+    v_is_anonymous := COALESCE(
+        NEW.is_anonymous, 
+        (NEW.raw_app_meta_data->>'provider' = 'anonymous'), 
+        FALSE
+    );
+
+    -- 2. Only create parish for registered admin accounts
+    IF NOT v_is_anonymous THEN
+        -- Get parish name from metadata or fallback to email prefix
+        v_parish_name := COALESCE(
+            NEW.raw_user_meta_data->>'parish_name', 
+            'Giáo xứ của ' || COALESCE(split_part(NEW.email, '@', 1), 'Admin')
+        );
+
+        -- Get parish slug from metadata or auto-generate from email/prefix
+        v_parish_slug := COALESCE(
+            NEW.raw_user_meta_data->>'parish_slug',
+            'giao-xu-' || LOWER(REGEXP_REPLACE(
+                COALESCE(split_part(NEW.email, '@', 1), 'admin'), 
+                '[^a-zA-Z0-9]', 
+                '-', 
+                'g'
+            ))
+        );
+
+        -- Clean up slug structure (remove extra hyphens, trim edges)
+        v_clean_slug := REGEXP_REPLACE(v_parish_slug, '-+', '-', 'g');
+        v_clean_slug := TRIM(BOTH '-' FROM v_clean_slug);
+        v_parish_slug := v_clean_slug;
+
+        -- 3. Collision Resolution for duplicate slugs
+        WHILE EXISTS (SELECT 1 FROM public.parishes WHERE slug = v_parish_slug) LOOP
+            v_parish_slug := v_clean_slug || '-' || v_counter;
+            v_counter := v_counter + 1;
+            
+            -- Prevent infinite loops in case of extreme errors
+            IF v_counter > 100 THEN
+                v_parish_slug := v_clean_slug || '-' || SUBSTRING(NEW.id::text FROM 1 FOR 8);
+                EXIT;
+            END IF;
+        END LOOP;
+
+        -- 4. Insert the newly mapped parish profile
+        INSERT INTO public.parishes (
+            name, 
+            slug, 
+            owner_id, 
+            status, 
+            created_at, 
+            updated_at
+        )
+        VALUES (
+            v_parish_name, 
+            v_parish_slug, 
+            NEW.id, 
+            'active', 
+            CURRENT_TIMESTAMP, 
+            CURRENT_TIMESTAMP
+        );
+    END IF;
+
+    RETURN NEW;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Log warning and proceed to not block user registration flow
+        RAISE WARNING 'Lỗi trong handle_new_admin_user: % (SQLSTATE: %)', SQLERRM, SQLSTATE;
+        RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger mapping after new user inserts in auth.users
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_new_admin_user();

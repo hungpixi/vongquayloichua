@@ -5,12 +5,24 @@ import crypto from 'crypto';
 // Extend IncomingMessage to include query and body (provided by Vercel Node helper wrapper)
 interface VercelRequest extends IncomingMessage {
   query: { [key: string]: string | string[] };
-  body: any;
+  body: Record<string, unknown> | null | undefined;
 }
 
 interface VercelResponse extends ServerResponse {
   status: (statusCode: number) => VercelResponse;
-  json: (body: any) => void;
+  json: (body: Record<string, unknown> | unknown) => void;
+}
+
+interface SpinQueueItem {
+  id?: string;
+  wheel_id: string;
+  blessing_id?: string | null;
+  item_spun?: string;
+  gift_name?: string;
+  session_id?: string;
+  parishioner_name?: string;
+  ip_address?: string;
+  created_at?: string;
 }
 
 // Initialize environment variables
@@ -30,27 +42,77 @@ function isPermanentError(code?: string): boolean {
   return code.startsWith('22') || code.startsWith('23') || code.startsWith('42');
 }
 
+// Helper to dynamically check and get CORS headers
+function getCorsHeaders(req: VercelRequest): { [key: string]: string } | null {
+  const origin = (req.headers.origin || req.headers.Origin) as string;
+  if (!origin) return null;
+
+  try {
+    const hostname = new URL(origin).hostname;
+    let isAllowed = false;
+
+    // Allow localhost, local IP addresses
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0'
+    ) {
+      isAllowed = true;
+    }
+    // Allow main platform domains & subdomains
+    else if (
+      hostname === 'vongquayloichua.com' ||
+      hostname.endsWith('.vongquayloichua.com')
+    ) {
+      isAllowed = true;
+    }
+    // Allow Vercel deployments (previews, etc.)
+    else if (hostname.endsWith('.vercel.app')) {
+      isAllowed = true;
+    }
+
+    if (isAllowed) {
+      return {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Fingerprint',
+        'Access-Control-Max-Age': '86400',
+      };
+    }
+  } catch (err) {
+    console.error('CORS origin parsing error:', err);
+  }
+
+  return null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // 1. Method verification
+  // 1. Setup CORS headers dynamically
+  const cors = getCorsHeaders(req);
+  if (cors) {
+    Object.entries(cors).forEach(([key, val]) => {
+      res.setHeader(key, val);
+    });
+  }
+
+  // Handle CORS Preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    if (!cors) {
+      return res.status(403).json({ error: 'CORS Origin Not Allowed' });
+    }
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  // 1.b Method verification
   if (req.method !== 'GET' && req.method !== 'POST') {
     res.setHeader('Allow', ['GET', 'POST']);
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // 2. Security validation
-  const authHeader = req.headers.authorization;
-  const secretQuery = req.query?.secret;
-
-  if (cronSecret) {
-    const expectedAuth = `Bearer ${cronSecret}`;
-    if (authHeader !== expectedAuth && secretQuery !== cronSecret) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-  } else {
-    console.warn('[Sync Worker] Warning: CRON_SECRET is not configured in environment variables.');
-  }
-
-  // 3. Dependency validation
+  // 2. Dependency validation
   if (!supabaseUrl || !supabaseServiceKey) {
     console.error('[Sync Worker] Supabase credentials missing.');
     return res.status(500).json({ error: 'Database configuration missing' });
@@ -67,6 +129,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       autoRefreshToken: false,
     }
   });
+
+  // 3. Security validation
+  const authHeader = req.headers.authorization;
+  const secretQuery = req.query?.secret;
+  
+  let isAuthorized = false;
+
+  // Verify Supabase JWT token first if authHeader starts with Bearer
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    if (cronSecret && token === cronSecret) {
+      isAuthorized = true;
+    } else {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (user && !userError) {
+          isAuthorized = true;
+        }
+      } catch (err) {
+        console.warn('[Sync Worker] Supabase session token verification failed:', err);
+      }
+    }
+  }
+
+  // Check query parameter fallback for cronSecret
+  if (!isAuthorized && cronSecret && secretQuery === cronSecret) {
+    isAuthorized = true;
+  }
+
+  if (!isAuthorized) {
+    return res.status(401).json({ error: 'Unauthorized: Invalid token or credentials' });
+  }
 
   const redisHeaders = {
     'Authorization': `Bearer ${redisToken}`,
@@ -129,9 +223,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`[Sync Worker] Found ${K} items in queue. Starting sync...`);
 
       // Parse queue items
-      const parsedRecords = rawItems.map((rawItem: any) => {
+      const parsedRecords = rawItems.map((rawItem: unknown) => {
         try {
-          const item = typeof rawItem === 'string' ? JSON.parse(rawItem) : rawItem;
+          const item = (typeof rawItem === 'string' ? JSON.parse(rawItem) : rawItem) as SpinQueueItem;
           // Build strict schema compliance object
           return {
             id: item.id || crypto.randomUUID(),
@@ -149,7 +243,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       // Filter out totally corrupt records (null or missing wheel_id)
-      const validRecords = parsedRecords.filter((rec: any) => rec !== null && rec.wheel_id) as any[];
+      const validRecords = parsedRecords.filter((rec): rec is NonNullable<typeof rec> => rec !== null && !!rec.wheel_id);
       const corruptCount = K - validRecords.length;
       itemsSkipped += corruptCount;
 
@@ -265,7 +359,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         message: `Synced ${itemsSuccess} spins. Skipped/failed ${itemsSkipped + itemsFailed} items.`
       });
 
-    } catch (innerError: any) {
+    } catch (innerError: unknown) {
       // Release lock on exception
       await fetch(redisUrl, {
         method: 'POST',
@@ -275,11 +369,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw innerError;
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Sync Worker] Critical Error during execution:', error);
+    const msg = error instanceof Error ? error.message : String(error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Internal Server Error'
+      error: msg || 'Internal Server Error'
     });
   }
 }

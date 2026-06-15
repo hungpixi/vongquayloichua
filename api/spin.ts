@@ -5,33 +5,77 @@ import crypto from 'crypto';
 // Extend IncomingMessage and ServerResponse to match Vercel Node API signatures
 interface VercelRequest extends IncomingMessage {
   query: { [key: string]: string | string[] };
-  body: any;
+  body: Record<string, unknown> | null | undefined;
 }
 
 interface VercelResponse extends ServerResponse {
   status: (statusCode: number) => VercelResponse;
-  json: (body: any) => void;
+  json: (body: Record<string, unknown> | unknown) => void;
 }
 
-// Setup CORS headers
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+// Helper to dynamically check and get CORS headers
+function getCorsHeaders(req: VercelRequest): { [key: string]: string } | null {
+  const origin = (req.headers.origin || req.headers.Origin) as string;
+  if (!origin) return null;
+
+  try {
+    const hostname = new URL(origin).hostname;
+    let isAllowed = false;
+
+    // Allow localhost, local IP addresses
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0'
+    ) {
+      isAllowed = true;
+    }
+    // Allow main platform domains & subdomains
+    else if (
+      hostname === 'vongquayloichua.com' ||
+      hostname.endsWith('.vongquayloichua.com')
+    ) {
+      isAllowed = true;
+    }
+    // Allow Vercel deployments (previews, etc.)
+    else if (hostname.endsWith('.vercel.app')) {
+      isAllowed = true;
+    }
+
+    if (isAllowed) {
+      return {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Fingerprint',
+        'Access-Control-Max-Age': '86400',
+      };
+    }
+  } catch (err) {
+    console.error('CORS origin parsing error:', err);
+  }
+
+  return null;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // 1. Handle CORS Preflight OPTIONS request
+  // 1. Setup CORS headers dynamically
+  const cors = getCorsHeaders(req);
+  if (cors) {
+    Object.entries(cors).forEach(([key, val]) => {
+      res.setHeader(key, val);
+    });
+  }
+
+  // Handle CORS Preflight OPTIONS request
   if (req.method === 'OPTIONS') {
-    res.writeHead(200, corsHeaders);
+    if (!cors) {
+      return res.status(403).json({ error: 'CORS Origin Not Allowed' });
+    }
+    res.writeHead(200);
     res.end();
     return;
   }
-
-  // Set standard CORS headers for subsequent responses
-  Object.entries(corsHeaders).forEach(([key, val]) => {
-    res.setHeader(key, val);
-  });
 
   // 2. Only allow POST requests
   if (req.method !== 'POST') {
@@ -40,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // 3. Parse and validate input body
-    const { wheel_id, fingerprint, name, group, session_token } = req.body || {};
+    const { wheel_id, fingerprint, name, group } = (req.body || {}) as Record<string, string>;
 
     if (!wheel_id) {
       return res.status(400).json({ error: 'Missing wheel_id parameter' });
@@ -84,20 +128,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
-    // 5.b Verify authenticated Supabase user (if session token is provided)
-    let userId = '';
+    // 5.b Verify authenticated Supabase user (session token is mandatory)
     const authHeader = req.headers['authorization'] as string || '';
-    const sessionToken = session_token || (authHeader.startsWith('Bearer ') ? authHeader.substring(7) : '');
-    
-    if (sessionToken) {
-      try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser(sessionToken);
-        if (user && !userError) {
-          userId = user.id;
-        }
-      } catch (err) {
-        console.warn('Supabase session token verification failed:', err);
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized: Missing or invalid Authorization header' });
+    }
+
+    const sessionToken = authHeader.substring(7);
+    let userId = '';
+
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser(sessionToken);
+      if (userError || !user) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid session token' });
       }
+      userId = user.id;
+    } catch (err) {
+      console.error('Supabase session token verification failed:', err);
+      return res.status(401).json({ error: 'Unauthorized: Token verification failed' });
     }
 
     // 6. Fetch the wheel configuration to check lock_duration and display_slots
@@ -211,7 +259,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (typeof globalThis.crypto?.getRandomValues === 'function') {
         globalThis.crypto.getRandomValues(array);
       } else if (crypto.webcrypto && typeof crypto.webcrypto.getRandomValues === 'function') {
-        (crypto.webcrypto as any).getRandomValues(array);
+        (crypto.webcrypto as unknown as { getRandomValues: typeof crypto.getRandomValues }).getRandomValues(array);
       } else {
         const buffer = crypto.randomBytes(4);
         array[0] = buffer.readUInt32BE(0);
@@ -302,11 +350,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       signature,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Server error handling spin:', error);
+    const msg = error instanceof Error ? error.message : String(error);
     return res.status(500).json({
       error: 'Có lỗi xảy ra trên máy chủ khi chọn Lộc Lời Chúa. Vui lòng thử lại!',
-      details: error.message || String(error)
+      details: msg
     });
   }
 }

@@ -191,7 +191,7 @@ export const ParishionerWheel: React.FC = () => {
     },
     parish: {
       label: 'Giáo xứ',
-      text: (_sender: string) => `Kính chúc quý cha và quý cộng đoàn giáo xứ một năm mới khang an, thánh đức. Kính gửi Lộc Lời Chúa chúc xuân:`
+      text: () => `Kính chúc quý cha và quý cộng đoàn giáo xứ một năm mới khang an, thánh đức. Kính gửi Lộc Lời Chúa chúc xuân:`
     }
   };
 
@@ -245,8 +245,10 @@ export const ParishionerWheel: React.FC = () => {
     if (sParam) {
       const decoded = decodeSharePayload(sParam);
       if (decoded && decoded.b) {
-        setSharedBlessingData(decoded);
-        setIsSharedMode(true);
+        Promise.resolve().then(() => {
+          setSharedBlessingData(decoded);
+          setIsSharedMode(true);
+        });
       }
     }
   }, []);
@@ -489,7 +491,7 @@ export const ParishionerWheel: React.FC = () => {
 
   const initAudio = useCallback(() => {
     if (!audioContextRef.current) {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioContextClass) {
         audioContextRef.current = new AudioContextClass();
       }
@@ -608,8 +610,8 @@ export const ParishionerWheel: React.FC = () => {
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       
-      let text = '';
-      let fontSize = '14px';
+      let text: string;
+      let fontSize: string;
       
       if (displayType === 'text') {
         if (blessings.length > 0) {
@@ -858,11 +860,16 @@ export const ParishionerWheel: React.FC = () => {
       let targetAngle = 0;
       
       try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (session_token) {
+          headers['Authorization'] = `Bearer ${session_token}`;
+        }
+
         const response = await fetch('/api/spin', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({
             wheel_id: wheel.id,
             fingerprint,
@@ -880,9 +887,10 @@ export const ParishionerWheel: React.FC = () => {
         blessing = data.blessing;
         targetAngle = data.target_angle;
         isServerSpunRef.current = true;
-      } catch (apiError: any) {
-        if (apiError && apiError.isServerError) {
-          throw new Error(apiError.message);
+      } catch (apiError: unknown) {
+        const err = apiError as { isServerError?: boolean; message?: string };
+        if (err && err.isServerError) {
+          throw new Error(err.message || 'Lỗi kết nối máy chủ', { cause: apiError });
         }
         
         console.warn('API call failed, falling back to local RNG selection:', apiError);
@@ -892,7 +900,7 @@ export const ParishionerWheel: React.FC = () => {
         const fallbackBlessing = blessings[randomIdx];
         
         if (!fallbackBlessing) {
-          throw new Error('Không thể chọn lộc.');
+          throw new Error('Không thể chọn lộc.', { cause: apiError });
         }
         
         blessing = fallbackBlessing;
@@ -938,9 +946,10 @@ export const ParishionerWheel: React.FC = () => {
         animateSpinRef.current();
       });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Spin initialization error:', err);
-      showToast(err.message || 'Có lỗi xảy ra, vui lòng thử lại.');
+      const msg = err instanceof Error ? err.message : typeof err === 'object' && err !== null && 'message' in err ? String((err as Record<string, unknown>).message) : 'Có lỗi xảy ra, vui lòng thử lại.';
+      showToast(msg);
       isSpinningRef.current = false;
       setIsSpinning(false);
     }
@@ -1441,7 +1450,7 @@ export const ParishionerWheel: React.FC = () => {
                       </label>
                       <select
                         value={shareTemplate}
-                        onChange={(e) => setShareTemplate(e.target.value as any)}
+                        onChange={(e) => setShareTemplate(e.target.value as 'friend' | 'family' | 'group' | 'parish')}
                         style={{
                           width: '100%',
                           height: '32px',

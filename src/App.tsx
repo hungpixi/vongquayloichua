@@ -7,6 +7,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminWheelEditor } from './pages/AdminWheelEditor';
 import { ParishionerWheel } from './pages/ParishionerWheel';
+import { AuthCallback } from './pages/AuthCallback';
 
 // Route protection for Admin pages
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -34,6 +35,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/admin/auth/callback" element={<AuthCallback />} />
 
       {/* Admin Protected Routes */}
       <Route

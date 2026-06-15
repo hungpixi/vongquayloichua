@@ -128,42 +128,13 @@ const getLocalDB = (): Promise<IDBDatabase> => {
 export interface SyncAction {
   id: string;
   action_type: 'RECORD_SPIN' | 'UPDATE_WHEEL' | 'SAVE_BLESSINGS';
-  payload: any;
+  payload: unknown;
   status: 'pending' | 'syncing' | 'failed';
   retry_count: number;
   last_attempt: string | null;
 }
 
 // Helper functions for sync queue management
-export const pushToSyncQueue = async (action: Omit<SyncAction, 'status' | 'retry_count' | 'last_attempt'>) => {
-  const syncAction: SyncAction = {
-    ...action,
-    status: 'pending',
-    retry_count: 0,
-    last_attempt: null
-  };
-
-  try {
-    const db = await getLocalDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(SYNC_QUEUE_STORE, 'readwrite');
-      const store = tx.objectStore(SYNC_QUEUE_STORE);
-      const req = store.put(syncAction);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch (err) {
-    console.warn('IndexedDB write failed, falling back to LocalStorage:', err);
-    try {
-      const queue: SyncAction[] = JSON.parse(localStorage.getItem('vqlc_sync_queue') || '[]');
-      queue.push(syncAction);
-      localStorage.setItem('vqlc_sync_queue', JSON.stringify(queue));
-    } catch (e) {
-      console.error('Failed to write to LocalStorage fallback:', e);
-    }
-  }
-};
-
 export const updateActionStatus = async (action: SyncAction) => {
   try {
     const db = await getLocalDB();
@@ -174,7 +145,7 @@ export const updateActionStatus = async (action: SyncAction) => {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-  } catch (err) {
+  } catch {
     try {
       const queue: SyncAction[] = JSON.parse(localStorage.getItem('vqlc_sync_queue') || '[]');
       const idx = queue.findIndex(a => a.id === action.id);
@@ -200,7 +171,7 @@ export const removeAction = async (id: string) => {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-  } catch (err) {
+  } catch {
     try {
       let queue: SyncAction[] = JSON.parse(localStorage.getItem('vqlc_sync_queue') || '[]');
       queue = queue.filter(a => a.id !== id);
@@ -335,13 +306,49 @@ export const dbService = {
 
   async signUp(email: string, password: string, parishName: string, slug: string) {
     if (isOnline()) {
-      // 1. Sign up user
-      const { data, error } = await supabase!.auth.signUp({ email, password });
+      // Validate parish slug uniqueness before starting signup
+      const isUnique = await dbService.checkParishSlugUnique(slug);
+      if (!isUnique) {
+        throw new Error('Đường dẫn Giáo xứ đã tồn tại. Vui lòng chọn đường dẫn khác.');
+      }
+
+      // 1. Sign up user with metadata so database trigger can read them
+      const { data, error } = await supabase!.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            parish_name: parishName,
+            parish_slug: slug
+          }
+        }
+      });
       if (error) throw error;
       if (!data.user) throw new Error('User creation failed');
 
-      // 2. Create parish for user
-      await dbService.createParish(data.user.id, parishName, slug);
+      // 2. The database trigger handle_new_admin_user creates the parish automatically.
+      // Retrieve the created parish, or fallback to manual creation if trigger didn't run.
+      const parish = await dbService.getParishByOwner(data.user.id);
+      if (!parish) {
+        await dbService.createParish(data.user.id, parishName, slug);
+      } else {
+        // Trigger created it. Ensure it has the default wheel and blessings.
+        const wheels = await dbService.getWheels(parish.id);
+        if (wheels.length === 0) {
+          try {
+            const defaultWheel = await dbService.createWheel(
+              parish.id,
+              'Bảy Ơn Chúa Thánh Thần',
+              'bay-on-thanh-than',
+              'Nguyện xin bảy ơn Chúa Thánh Thần tuôn đổ tràn trề trên anh chị em.',
+              'gold'
+            );
+            await dbService.loadDefaultBlessingsPreset(defaultWheel.id, 'gifts');
+          } catch (e) {
+            console.error('Error creating default wheel for new parish:', e);
+          }
+        }
+      }
 
       return data.user;
     } else {
@@ -382,6 +389,57 @@ export const dbService = {
       await supabase!.auth.signOut();
     } else {
       localStorage.removeItem('local_active_user');
+    }
+  },
+
+  async signInWithOtp(email: string, redirectTo: string, shouldCreateUser: boolean = false) {
+    if (isOnline()) {
+      const { data, error } = await supabase!.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: redirectTo,
+          shouldCreateUser
+        }
+      });
+      if (error) throw error;
+      return data;
+    } else {
+      const users = getLocalData<LocalUser>('local_users');
+      const userExists = users.some(u => u.email === email);
+      if (!shouldCreateUser && !userExists) {
+        throw new Error('Email chưa được đăng ký trong hệ thống.');
+      }
+      const mockOtp = '123456';
+      localStorage.setItem(`mock_otp_${email}`, mockOtp);
+      console.log(`[Offline Dev] Simulated OTP for ${email}: ${mockOtp}`);
+      return { success: true };
+    }
+  },
+
+  async verifyOtp(email: string, token: string, type: 'signup' | 'magiclink') {
+    if (isOnline()) {
+      const { data, error } = await supabase!.auth.verifyOtp({
+        email,
+        token,
+        type
+      });
+      if (error) throw error;
+      return { user: data.user || data.session?.user, session: data.session };
+    } else {
+      const mockOtp = localStorage.getItem(`mock_otp_${email}`);
+      if (token !== mockOtp && token !== '123456') {
+        throw new Error('Mã OTP không chính xác hoặc đã hết hạn.');
+      }
+      const users = getLocalData<LocalUser>('local_users');
+      let user = users.find(u => u.email === email);
+      if (!user) {
+        user = { id: generateUUID(), email };
+        users.push(user);
+        setLocalData<LocalUser>('local_users', users);
+      }
+      localStorage.setItem('local_active_user', JSON.stringify(user));
+      localStorage.removeItem(`mock_otp_${email}`);
+      return { user, session: { user, access_token: 'mock-jwt-token' } };
     }
   },
 
@@ -952,11 +1010,22 @@ export const dbService = {
 
     if (online) {
       try {
+        let session_token = '';
+        if (supabase) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          session_token = sessionData?.session?.access_token || '';
+        }
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (session_token) {
+          headers['Authorization'] = `Bearer ${session_token}`;
+        }
+
         const response = await fetch('/api/spin', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({
             wheel_id: wheelId,
             item_spun: itemSpun,
@@ -1249,18 +1318,37 @@ export const dbService = {
 
       try {
         if (action.action_type === 'RECORD_SPIN') {
+          let session_token = '';
+          if (supabase) {
+            const { data: sessionData } = await supabase.auth.getSession();
+            session_token = sessionData?.session?.access_token || '';
+          }
+
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          if (session_token) {
+            headers['Authorization'] = `Bearer ${session_token}`;
+          }
+
+          const payload = action.payload as {
+            wheel_id: string;
+            blessing_id?: string;
+            item_spun: string;
+            session_id?: string;
+            created_at?: string;
+            fingerprint?: string;
+          };
           const response = await fetch('/api/spin', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({
-              wheel_id: action.payload.wheel_id,
-              blessing_id: action.payload.blessing_id,
-              item_spun: action.payload.item_spun,
-              session_id: action.payload.session_id,
-              created_at: action.payload.created_at,
-              fingerprint: action.payload.fingerprint,
+              wheel_id: payload.wheel_id,
+              blessing_id: payload.blessing_id,
+              item_spun: payload.item_spun,
+              session_id: payload.session_id,
+              created_at: payload.created_at,
+              fingerprint: payload.fingerprint,
               offline_sync: true
             })
           });

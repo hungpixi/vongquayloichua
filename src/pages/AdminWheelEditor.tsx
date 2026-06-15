@@ -301,8 +301,8 @@ export const AdminWheelEditor: React.FC = () => {
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       
-      let text = '';
-      let fontSize = '11px';
+      let text: string;
+      let fontSize: string;
       
       if (slotDisplayType === 'text') {
         if (previewSegments.length > 0) {
@@ -395,7 +395,7 @@ export const AdminWheelEditor: React.FC = () => {
         previewAudioRef.current.pause();
       }
 
-      let audioUrl = '';
+      let audioUrl: string;
       if (bgmType === 'custom') {
         if (!customBgmUrl) {
           alert('Giáo xứ chưa tải lên nhạc nền tự chọn. Vui lòng chọn file nhạc.');
@@ -530,7 +530,7 @@ export const AdminWheelEditor: React.FC = () => {
 
   const playSfxPreview = async (type: 'spin' | 'win') => {
     if (!previewAudioContextRef.current) {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (AudioContextClass) {
         previewAudioContextRef.current = new AudioContextClass();
       }
@@ -551,7 +551,7 @@ export const AdminWheelEditor: React.FC = () => {
           return;
         }
 
-        let audioUrl = '';
+        let audioUrl: string;
         if (customWinSfxUrl.startsWith('indexeddb://')) {
           try {
             const blob = await dbService.getLocalWinSfx(wheelId!);

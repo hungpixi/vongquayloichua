@@ -76,6 +76,22 @@ const YoutubeIcon: React.FC<{ size?: number; style?: React.CSSProperties; classN
 
 
 
+interface CustomPreset {
+  id: string;
+  name: string;
+  blessings: {
+    category: string;
+    quote?: string;
+    text: string;
+  }[];
+}
+
+interface CombinedLog extends SpinHistory {
+  wheelTitle: string;
+}
+
+const generatePresetId = () => 'custom-' + Math.random().toString(36).substring(2, 9);
+
 export const AdminDashboard: React.FC = () => {
   const { user, parish, parishes, setCurrentParish, createParish, signOut, refreshParishes } = useAuth();
   const navigate = useNavigate();
@@ -114,17 +130,31 @@ export const AdminDashboard: React.FC = () => {
   const [presetsMode, setPresetsMode] = useState<'system' | 'custom'>('system');
 
   // Custom Presets Library States
-  interface CustomPreset {
-    id: string;
-    name: string;
-    blessings: {
-      category: string;
-      quote?: string;
-      text: string;
-    }[];
-  }
-  const [customPresets, setCustomPresets] = useState<CustomPreset[]>([]);
-  const [selectedCustomPresetId, setSelectedCustomPresetId] = useState<string | null>(null);
+  const [customPresets, setCustomPresets] = useState<CustomPreset[]>(() => {
+    const loaded = localStorage.getItem('local_custom_presets');
+    if (loaded) {
+      try {
+        return JSON.parse(loaded);
+      } catch (e) {
+        console.error('Lỗi khi đọc custom presets:', e);
+      }
+    }
+    return [];
+  });
+  const [selectedCustomPresetId, setSelectedCustomPresetId] = useState<string | null>(() => {
+    const loaded = localStorage.getItem('local_custom_presets');
+    if (loaded) {
+      try {
+        const parsed = JSON.parse(loaded);
+        if (parsed.length > 0) {
+          return parsed[0].id;
+        }
+      } catch (e) {
+        console.error('Lỗi khi đọc custom presets:', e);
+      }
+    }
+    return null;
+  });
 
   // Custom Presets CRUD Modal states
   const [showNewPresetModal, setShowNewPresetModal] = useState(false);
@@ -146,9 +176,6 @@ export const AdminDashboard: React.FC = () => {
   const [filterWheelId, setFilterWheelId] = useState('all');
 
   // Combined logs state for all wheels
-  interface CombinedLog extends SpinHistory {
-    wheelTitle: string;
-  }
   const [combinedLogs, setCombinedLogs] = useState<CombinedLog[]>([]);
 
   const [wheels, setWheels] = useState<Wheel[]>([]);
@@ -195,29 +222,6 @@ export const AdminDashboard: React.FC = () => {
   const [checkingNewParishSlug, setCheckingNewParishSlug] = useState(false);
   const [newParishSlugError, setNewParishSlugError] = useState<string | null>(null);
 
-  // Load custom presets on mount
-  useEffect(() => {
-    const loaded = localStorage.getItem('local_custom_presets');
-    if (loaded) {
-      try {
-        const parsed = JSON.parse(loaded);
-        setCustomPresets(parsed);
-        if (parsed.length > 0) {
-          setSelectedCustomPresetId(parsed[0].id);
-        }
-      } catch (e) {
-        console.error('Lỗi khi đọc custom presets:', e);
-      }
-    }
-  }, []);
-
-  // Auto-select first wheel for applying presets if not set
-  useEffect(() => {
-    if (wheels.length > 0 && !applyWheelId) {
-      setApplyWheelId(wheels[0].id);
-    }
-  }, [wheels, applyWheelId]);
-
   const saveCustomPresets = (updated: CustomPreset[]) => {
     setCustomPresets(updated);
     localStorage.setItem('local_custom_presets', JSON.stringify(updated));
@@ -228,7 +232,7 @@ export const AdminDashboard: React.FC = () => {
     if (!newPresetName.trim()) return;
     
     const newPreset: CustomPreset = {
-      id: 'custom-' + Math.random().toString(36).substring(2, 9),
+      id: generatePresetId(),
       name: newPresetName.trim(),
       blessings: []
     };
@@ -292,7 +296,7 @@ export const AdminDashboard: React.FC = () => {
         text: blessingText.trim()
       };
       
-      let newBlessings = [...preset.blessings];
+      const newBlessings = [...preset.blessings];
       if (blessingModalMode === 'edit' && editingBlessingIndex !== null) {
         newBlessings[editingBlessingIndex] = newBlessing;
       } else {
@@ -473,6 +477,9 @@ export const AdminDashboard: React.FC = () => {
 
       setCombinedLogs(allLogs);
       setSpinCounts(counts);
+      if (list.length > 0) {
+        setApplyWheelId(prev => prev || list[0].id);
+      }
     } catch (err) {
       console.error(err);
       setError('Không thể tải danh sách vòng quay.');
@@ -495,37 +502,39 @@ export const AdminDashboard: React.FC = () => {
   // Sync parish info to local states when loaded
   useEffect(() => {
     if (parish) {
-      setParishName(parish.name || '');
-      setParishSlug(parish.slug || '');
-      setParishLogo(parish.logo_url || '');
-      setParishBackground(parish.background_url || '');
-      setParishAddress(parish.address || '');
-      setParishPhone(parish.phone || '');
-      setParishFacebook(parish.facebook_url || '');
-      setParishYoutube(parish.youtube_url || '');
-      setParishGreeting(parish.greeting || '');
+      Promise.resolve().then(() => {
+        setParishName(parish.name || '');
+        setParishSlug(parish.slug || '');
+        setParishLogo(parish.logo_url || '');
+        setParishBackground(parish.background_url || '');
+        setParishAddress(parish.address || '');
+        setParishPhone(parish.phone || '');
+        setParishFacebook(parish.facebook_url || '');
+        setParishYoutube(parish.youtube_url || '');
+        setParishGreeting(parish.greeting || '');
 
-      try {
-        if (parish.mass_schedule) {
-          setMassSchedule(JSON.parse(parish.mass_schedule));
-        } else {
+        try {
+          if (parish.mass_schedule) {
+            setMassSchedule(JSON.parse(parish.mass_schedule));
+          } else {
+            setMassSchedule([]);
+          }
+        } catch (e) {
+          console.error('Lỗi parse mass_schedule:', e);
           setMassSchedule([]);
         }
-      } catch (e) {
-        console.error('Lỗi parse mass_schedule:', e);
-        setMassSchedule([]);
-      }
+      });
     }
   }, [parish]);
 
   // Realtime slug verification
   useEffect(() => {
     if (!parishSlug || !parish) {
-      setSlugIsUnique(null);
+      Promise.resolve().then(() => setSlugIsUnique(null));
       return;
     }
     if (parishSlug === parish.slug) {
-      setSlugIsUnique(true);
+      Promise.resolve().then(() => setSlugIsUnique(true));
       return;
     }
 
@@ -548,7 +557,7 @@ export const AdminDashboard: React.FC = () => {
   // Realtime check unique slug for New Parish
   useEffect(() => {
     if (!newParishSlug || !showNewParishModal) {
-      setNewParishSlugError(null);
+      Promise.resolve().then(() => setNewParishSlugError(null));
       return;
     }
 
