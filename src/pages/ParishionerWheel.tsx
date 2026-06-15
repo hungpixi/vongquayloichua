@@ -687,7 +687,7 @@ export const ParishionerWheel: React.FC = () => {
 
         if (!bgmAudioRef.current && audioUrl) {
           const audio = new Audio(audioUrl);
-          audio.volume = res.wheel.bgm_volume ?? 0.3;
+          audio.volume = res.wheel.bgm_volume ?? 1.0;
           audio.loop = true;
           
           const isMutedPref = localStorage.getItem('bgm_muted') === 'true';

@@ -880,7 +880,7 @@ export const dbService = {
     const audioDefaults = {
       bgm_enabled: extraFields?.bgm_enabled ?? false,
       bgm_type: extraFields?.bgm_type ?? 'schubert-ave-maria',
-      bgm_volume: extraFields?.bgm_volume ?? 0.3,
+      bgm_volume: extraFields?.bgm_volume ?? 1.0,
       spin_sfx_type: extraFields?.spin_sfx_type ?? 'tick',
       win_sfx_type: extraFields?.win_sfx_type ?? 'fanfare',
       display_slots: extraFields?.display_slots ?? 12,

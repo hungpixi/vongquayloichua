@@ -272,7 +272,7 @@ export const AdminWheelEditor: React.FC = () => {
   // DIY Audio States
   const [bgmEnabled, setBgmEnabled] = useState(false);
   const [bgmType, setBgmType] = useState('schubert-ave-maria');
-  const [bgmVolume, setBgmVolume] = useState(0.3);
+  const [bgmVolume, setBgmVolume] = useState(1.0);
   const [spinSfxType, setSpinSfxType] = useState('tick');
   const [winSfxType, setWinSfxType] = useState('fanfare');
   const [customBgmUrl, setCustomBgmUrl] = useState('');
@@ -385,7 +385,7 @@ export const AdminWheelEditor: React.FC = () => {
         setBackgroundUrl(parsed.backgroundUrl ?? '');
         setBgmEnabled(parsed.bgmEnabled ?? false);
         setBgmType(parsed.bgmType ?? 'schubert-ave-maria');
-        setBgmVolume(parsed.bgmVolume ?? 0.3);
+        setBgmVolume(parsed.bgmVolume ?? 1.0);
         setSpinSfxType(parsed.spinSfxType ?? 'tick');
         setWinSfxType(parsed.winSfxType ?? 'fanfare');
         setCustomBgmUrl(parsed.customBgmUrl ?? '');
@@ -733,7 +733,7 @@ export const AdminWheelEditor: React.FC = () => {
       setBackgroundUrl(result.wheel.background_url || '');
       setBgmEnabled(result.wheel.bgm_enabled ?? false);
       setBgmType(result.wheel.bgm_type ?? 'schubert-ave-maria');
-      setBgmVolume(result.wheel.bgm_volume ?? 0.3);
+      setBgmVolume(result.wheel.bgm_volume ?? 1.0);
       setSpinSfxType(result.wheel.spin_sfx_type ?? 'tick');
       setWinSfxType(result.wheel.win_sfx_type ?? 'fanfare');
       setCustomBgmUrl(result.wheel.custom_bgm_url || '');
