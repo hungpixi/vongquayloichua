@@ -443,6 +443,53 @@ export const dbService = {
     }
   },
 
+  async forgotPassword(email: string) {
+    if (isOnline()) {
+      const { error } = await supabase!.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/reset-password',
+      });
+      if (error) throw error;
+      return { success: true };
+    } else {
+      const users = getLocalData<LocalUser>('local_users');
+      const user = users.find(u => u.email === email);
+      if (!user) {
+        throw new Error('Email chưa được đăng ký trong hệ thống.');
+      }
+      const mockResetToken = 'mock-reset-token-123';
+      const resetLink = `${window.location.origin}/reset-password?email=${encodeURIComponent(email)}&token=${mockResetToken}`;
+      console.log(`[Offline Dev] Forgot Password Link: ${resetLink}`);
+      return { success: true, isMock: true, resetLink };
+    }
+  },
+
+  async updatePassword(password: string, email?: string) {
+    if (isOnline()) {
+      const { error } = await supabase!.auth.updateUser({ password });
+      if (error) throw error;
+      return { success: true };
+    } else {
+      let targetEmail = email;
+      if (!targetEmail) {
+        const activeUser = localStorage.getItem('local_active_user');
+        if (activeUser) {
+          targetEmail = JSON.parse(activeUser).email;
+        }
+      }
+      if (!targetEmail) {
+        throw new Error('Không tìm thấy thông tin tài khoản cần đặt lại mật khẩu.');
+      }
+      const users = getLocalData<LocalUser>('local_users');
+      const index = users.findIndex(u => u.email === targetEmail);
+      if (index === -1) {
+        throw new Error('Tài khoản không tồn tại.');
+      }
+      // Lưu lại thông tin mật khẩu giả lập nếu cần, ở đây chỉ cần trả về thành công
+      return { success: true };
+    }
+  },
+
+
   // --- PARISH OPERATIONS ---
   async getParishByOwner(ownerId: string): Promise<Parish | null> {
     if (isOnline()) {

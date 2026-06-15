@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dbService } from '../services/db';
 import type { Wheel, SpinHistory } from '../services/db';
+import { supabase } from '../services/supabaseClient';
 import {
   Church,
   Plus,
@@ -182,6 +183,11 @@ export const AdminDashboard: React.FC = () => {
   const [spinCounts, setSpinCounts] = useState<{ [wheelId: string]: number }>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Invite Code 2FA States
+  const [inviteCode, setInviteCode] = useState<string>('');
+  const [inviteRemaining, setInviteRemaining] = useState<number>(0);
+  const [inviteLoading, setInviteLoading] = useState<boolean>(false);
 
   // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -498,6 +504,53 @@ export const AdminDashboard: React.FC = () => {
     }, 0);
     return () => clearTimeout(timer);
   }, [user, navigate, fetchDashboardData]);
+
+  const fetchInviteCode = async () => {
+    try {
+      setInviteLoading(true);
+      let token = '';
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token || '';
+      }
+      const response = await fetch('/api/get-invite', {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setInviteCode(data.code);
+        setInviteRemaining(data.secondsRemaining);
+      }
+    } catch (err) {
+      console.error('Lỗi lấy mã mời:', err);
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchInviteCode();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (inviteRemaining <= 0) {
+      if (user && inviteCode) {
+        fetchInviteCode();
+      }
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setInviteRemaining(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [inviteRemaining, user, inviteCode]);
 
   // Sync parish info to local states when loaded
   useEffect(() => {
@@ -1010,6 +1063,88 @@ export const AdminDashboard: React.FC = () => {
             </button>
           </li>
         </ul>
+
+        {/* 2FA Invitation Code Widget */}
+        <div style={{
+          margin: '16px 16px 8px 16px',
+          padding: '16px',
+          borderRadius: '12px',
+          background: 'rgba(216, 180, 63, 0.04)',
+          border: '2px double var(--color-gold)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
+          position: 'relative'
+        }}>
+          {/* Corner Ornaments */}
+          <div className="corner-ornament top-left" style={{ borderColor: 'var(--color-gold)', width: '6px', height: '6px', top: '6px', left: '6px' }}></div>
+          <div className="corner-ornament top-right" style={{ borderColor: 'var(--color-gold)', width: '6px', height: '6px', top: '6px', right: '6px' }}></div>
+          <div className="corner-ornament bottom-left" style={{ borderColor: 'var(--color-gold)', width: '6px', height: '6px', bottom: '6px', left: '6px' }}></div>
+          <div className="corner-ornament bottom-right" style={{ borderColor: 'var(--color-gold)', width: '6px', height: '6px', bottom: '6px', right: '6px' }}></div>
+
+          <div style={{ 
+            fontSize: '11px', 
+            fontWeight: '700', 
+            color: 'var(--color-primary)', 
+            letterSpacing: '0.5px', 
+            textTransform: 'uppercase', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px' 
+          }}>
+            <span style={{ 
+              display: 'inline-block', 
+              width: '6px', 
+              height: '6px', 
+              borderRadius: '50%', 
+              backgroundColor: '#10B981'
+            }}></span>
+            Mã mời 2FA (15 Phút)
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {inviteLoading && !inviteCode ? (
+              <Loader className="animate-spin" size={20} style={{ color: 'var(--color-gold)' }} />
+            ) : (
+              <span style={{ fontSize: '22px', fontFamily: 'monospace', fontWeight: '800', color: 'var(--color-primary)', letterSpacing: '2px' }}>
+                {inviteCode || '------'}
+              </span>
+            )}
+            
+            {inviteCode && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(inviteCode);
+                  showToastMsg('Đã sao chép mã mời!');
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--color-primary-soft)',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '4px',
+                  transition: 'background 0.2s'
+                }}
+                title="Sao chép mã mời"
+              >
+                <Clipboard size={13} />
+              </button>
+            )}
+          </div>
+
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+            {inviteRemaining > 0 ? (
+              <span>Đổi mã mới sau {Math.floor(inviteRemaining / 60)}:{(inviteRemaining % 60).toString().padStart(2, '0')}</span>
+            ) : (
+              <span>Đang cập nhật mã...</span>
+            )}
+          </div>
+        </div>
 
         <div className="sidebar-footer">
           <div style={{ fontSize: '11px', opacity: 0.7 }}>

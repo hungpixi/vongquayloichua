@@ -1,36 +1,48 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../services/supabaseClient';
-import { Church, Loader, ShieldAlert } from 'lucide-react';
+import { Church, Loader, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
-export const LoginPage: React.FC = () => {
-  const { signIn } = useAuth();
+export const ResetPassword: React.FC = () => {
+  const { updatePassword } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const [email, setEmail] = useState(() => localStorage.getItem('remembered_email') || '');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const emailParam = searchParams.get('email') || undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
+
+    if (password.length < 6) {
+      setError('Mật khẩu mới phải chứa ít nhất 6 ký tự.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      localStorage.setItem('remembered_email', email);
-      navigate('/admin');
+      await updatePassword(password, emailParam);
+      setSuccess('Đặt lại mật khẩu thành công! Bạn sẽ được chuyển hướng về trang Đăng nhập sau giây lát...');
+      
+      setTimeout(() => {
+        navigate('/login');
+      }, 3000);
     } catch (err: unknown) {
       console.error(err);
-      const msg = err instanceof Error 
-        ? err.message 
-        : typeof err === 'object' && err !== null && 'message' in err 
-        ? String((err as Record<string, unknown>).message) 
-        : typeof err === 'string'
-        ? err
-        : 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.';
+      const msg = err instanceof Error ? err.message : 'Đặt lại mật khẩu thất bại. Phiên đặt lại có thể đã hết hạn.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -60,10 +72,10 @@ export const LoginPage: React.FC = () => {
         <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
           <Church size={44} style={{ color: 'var(--color-primary)' }} />
           <h2 className="text-serif" style={{ fontSize: '26px', color: 'var(--color-primary)', fontWeight: '800' }}>
-            Đăng nhập Quản trị
+            Đặt lại mật khẩu
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-            Nhập email và mật khẩu của Cha để quản lý vòng quay
+            Nhập mật khẩu mới của Cha cho tài khoản {emailParam && <strong>{emailParam}</strong>}
           </p>
         </div>
 
@@ -86,26 +98,29 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
+        {success && (
+          <div style={{ 
+            background: 'rgba(16, 185, 129, 0.08)', 
+            border: '1px solid rgba(16, 185, 129, 0.15)', 
+            color: 'var(--color-success)', 
+            padding: '12px', 
+            borderRadius: '8px', 
+            fontSize: '13px', 
+            textAlign: 'center',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            justifyContent: 'center'
+          }}>
+            <CheckCircle2 size={16} />
+            <span>{success}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div className="form-group">
-            <label htmlFor="email" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-              Email tài khoản
-            </label>
-            <input
-              id="email"
-              type="email"
-              className="form-control"
-              placeholder="cha-xu@gmail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
-            />
-          </div>
-
-          <div className="form-group">
             <label htmlFor="password" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-              Mật khẩu
+              Mật khẩu mới
             </label>
             <input
               id="password"
@@ -119,19 +134,21 @@ export const LoginPage: React.FC = () => {
             />
           </div>
 
-          {!supabase && (
-            <div style={{ 
-              fontSize: '12px', 
-              color: 'var(--color-primary-soft)', 
-              backgroundColor: 'rgba(15, 61, 46, 0.05)', 
-              padding: '10px', 
-              borderRadius: '8px', 
-              textAlign: 'center', 
-              border: '1px solid rgba(15, 61, 46, 0.1)' 
-            }}>
-              Chế độ chạy thử: Dùng tài khoản <strong>devadmin</strong> để đăng nhập.
-            </div>
-          )}
+          <div className="form-group">
+            <label htmlFor="confirmPassword" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+              Xác nhận mật khẩu mới
+            </label>
+            <input
+              id="confirmPassword"
+              type="password"
+              className="form-control"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+            />
+          </div>
 
           <button
             type="submit"
@@ -139,25 +156,12 @@ export const LoginPage: React.FC = () => {
             style={{ width: '100%', height: '46px', fontSize: '14px', marginTop: '4px' }}
             disabled={loading}
           >
-            {loading ? <Loader className="animate-spin" size={18} /> : 'Đăng nhập'}
+            {loading ? <Loader className="animate-spin" size={18} /> : 'Cập nhật mật khẩu'}
           </button>
         </form>
-
-        <div style={{ textAlign: 'center', fontSize: '13px', marginTop: '-8px' }}>
-          <Link to="/forgot-password" style={{ color: 'var(--color-primary-soft)', textDecoration: 'underline' }}>
-            Quên mật khẩu?
-          </Link>
-        </div>
-
-        <div style={{ textAlign: 'center', fontSize: '13px', color: 'var(--color-text-muted)', borderTop: '1px solid rgba(15, 61, 46, 0.08)', paddingTop: '16px', marginTop: '8px' }}>
-          Chưa có tài khoản?{' '}
-          <Link to="/register" style={{ color: 'var(--color-primary)', fontWeight: '700', textDecoration: 'underline' }}>
-            Đăng ký miễn phí
-          </Link>
-        </div>
       </div>
     </div>
   );
 };
 
-export default LoginPage;
+export default ResetPassword;

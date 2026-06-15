@@ -28,6 +28,8 @@ interface AuthContextType {
     token: string,
     type: 'signup' | 'magiclink'
   ) => Promise<{ success: boolean; session: Session | null; error: string | null }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; isMock?: boolean; resetLink?: string }>;
+  updatePassword: (password: string, email?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -410,6 +412,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const forgotPassword = async (email: string) => {
+    setLoading(true);
+    try {
+      return await dbService.forgotPassword(email);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updatePassword = async (password: string, email?: string) => {
+    setLoading(true);
+    try {
+      await dbService.updatePassword(password, email);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <AuthContext.Provider value={{ 
@@ -427,7 +447,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       refreshParishes,
       createParish,
       sendOtpToEmail,
-      verifyOtpCode
+      verifyOtpCode,
+      forgotPassword,
+      updatePassword
     }}>
       {children}
     </AuthContext.Provider>
