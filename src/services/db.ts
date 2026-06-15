@@ -32,6 +32,9 @@ export interface Parish {
   youtube_url?: string;
   mass_schedule?: string;
   greeting?: string;
+  pastor_name?: string;
+  pastor_phone?: string;
+  pastor_title?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -333,7 +336,7 @@ export const dbService = {
     }
   },
 
-  async signUp(email: string, password: string, parishName: string, slug: string) {
+  async signUp(email: string, password: string, parishName: string, slug: string, pastorName: string, pastorPhone: string, pastorTitle: string) {
     if (isOnline()) {
       // Validate parish slug uniqueness before starting signup
       const isUnique = await dbService.checkParishSlugUnique(slug);
@@ -348,7 +351,10 @@ export const dbService = {
         options: {
           data: {
             parish_name: parishName,
-            parish_slug: slug
+            parish_slug: slug,
+            pastor_name: pastorName,
+            pastor_phone: pastorPhone,
+            pastor_title: pastorTitle
           }
         }
       });
@@ -359,7 +365,7 @@ export const dbService = {
       // Retrieve the created parish, or fallback to manual creation if trigger didn't run.
       const parish = await dbService.getParishByOwner(data.user.id);
       if (!parish) {
-        await dbService.createParish(data.user.id, parishName, slug);
+        await dbService.createParish(data.user.id, parishName, slug, pastorName, pastorPhone, pastorTitle);
       } else {
         // Trigger created it. Ensure it has the default wheel and blessings.
         const wheels = await dbService.getWheels(parish.id);
@@ -390,7 +396,7 @@ export const dbService = {
       users.push(mockUser);
       setLocalData<LocalUser>('local_users', users);
 
-      await dbService.createParish(mockUser.id, parishName, slug);
+      await dbService.createParish(mockUser.id, parishName, slug, pastorName, pastorPhone, pastorTitle);
 
       localStorage.setItem('local_active_user', JSON.stringify(mockUser));
       return mockUser;
@@ -666,7 +672,7 @@ export const dbService = {
     }
   },
 
-  async createParish(ownerId: string, name: string, slug: string): Promise<Parish> {
+  async createParish(ownerId: string, name: string, slug: string, pastorName?: string, pastorPhone?: string, pastorTitle?: string): Promise<Parish> {
     let parish: Parish;
     if (isOnline()) {
       const { data, error } = await supabase!
@@ -674,7 +680,10 @@ export const dbService = {
         .insert({
           owner_id: ownerId,
           name,
-          slug
+          slug,
+          pastor_name: pastorName,
+          pastor_phone: pastorPhone,
+          pastor_title: pastorTitle
         })
         .select()
         .single();
@@ -690,6 +699,9 @@ export const dbService = {
         owner_id: ownerId,
         name,
         slug,
+        pastor_name: pastorName,
+        pastor_phone: pastorPhone,
+        pastor_title: pastorTitle,
         created_at: new Date().toISOString()
       };
       parishes.push(mockParish);

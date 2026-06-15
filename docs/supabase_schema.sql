@@ -22,6 +22,9 @@ CREATE TABLE parishes (
     slug VARCHAR(100) UNIQUE NOT NULL,
     owner_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+    pastor_name VARCHAR(255),
+    pastor_phone VARCHAR(50),
+    pastor_title VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -284,6 +287,9 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_parish_name TEXT;
     v_parish_slug TEXT;
+    v_pastor_name TEXT;
+    v_pastor_phone TEXT;
+    v_pastor_title TEXT;
     v_is_anonymous BOOLEAN;
     v_clean_slug TEXT;
     v_counter INTEGER := 1;
@@ -314,6 +320,11 @@ BEGIN
             ))
         );
 
+        -- Extract pastor info
+        v_pastor_name := NEW.raw_user_meta_data->>'pastor_name';
+        v_pastor_phone := NEW.raw_user_meta_data->>'pastor_phone';
+        v_pastor_title := NEW.raw_user_meta_data->>'pastor_title';
+
         -- Clean up slug structure (remove extra hyphens, trim edges)
         v_clean_slug := REGEXP_REPLACE(v_parish_slug, '-+', '-', 'g');
         v_clean_slug := TRIM(BOTH '-' FROM v_clean_slug);
@@ -337,6 +348,9 @@ BEGIN
             slug, 
             owner_id, 
             status, 
+            pastor_name,
+            pastor_phone,
+            pastor_title,
             created_at, 
             updated_at
         )
@@ -345,6 +359,9 @@ BEGIN
             v_parish_slug, 
             NEW.id, 
             'active', 
+            v_pastor_name,
+            v_pastor_phone,
+            v_pastor_title,
             CURRENT_TIMESTAMP, 
             CURRENT_TIMESTAMP
         );

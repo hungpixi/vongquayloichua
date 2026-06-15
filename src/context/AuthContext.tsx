@@ -11,7 +11,7 @@ interface AuthContextType {
   currentParish: Parish | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, parishName: string, slug: string) => Promise<void>;
+  signUp: (email: string, password: string, parishName: string, slug: string, pastorName: string, pastorPhone: string, pastorTitle: string) => Promise<void>;
   signInWithOtp: (email: string, shouldCreateUser?: boolean) => Promise<void>;
   verifyOtp: (email: string, token: string, type: 'signup' | 'magiclink') => Promise<void>;
   signOut: () => Promise<void>;
@@ -230,10 +230,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, parishName: string, slug: string) => {
+  const signUp = async (email: string, password: string, parishName: string, slug: string, pastorName: string, pastorPhone: string, pastorTitle: string) => {
     setLoading(true);
     try {
-      const registeredUser = await dbService.signUp(email, password, parishName, slug);
+      const registeredUser = await dbService.signUp(email, password, parishName, slug, pastorName, pastorPhone, pastorTitle);
       setUser(registeredUser || null);
       
       const list = await dbService.getParishesByOwner(registeredUser.id);

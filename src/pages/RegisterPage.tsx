@@ -13,6 +13,9 @@ export const RegisterPage: React.FC = () => {
   const [slug, setSlug] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [pastorName, setPastorName] = useState('');
+  const [pastorPhone, setPastorPhone] = useState('');
+  const [pastorTitle, setPastorTitle] = useState('');
   const [invitationCode, setInvitationCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   
@@ -92,6 +95,21 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    if (!pastorName.trim()) {
+      setError('Vui lòng nhập Họ và tên Linh mục.');
+      return;
+    }
+
+    if (!pastorPhone.trim()) {
+      setError('Vui lòng nhập Số điện thoại liên hệ.');
+      return;
+    }
+
+    if (!pastorTitle.trim()) {
+      setError('Vui lòng nhập Chức vụ tôn giáo.');
+      return;
+    }
+
     if (!invitationCode.trim()) {
       setError('Vui lòng nhập mã mời xác thực.');
       return;
@@ -133,7 +151,7 @@ export const RegisterPage: React.FC = () => {
       localStorage.setItem('pending_parish_slug', slug);
 
       // Register using Email & Password (no OTP email confirmation required)
-      await signUp(email, password, parishName, slug);
+      await signUp(email, password, parishName, slug, pastorName, pastorPhone, pastorTitle);
       navigate('/admin');
       
     } catch (err: unknown) {
@@ -242,6 +260,54 @@ export const RegisterPage: React.FC = () => {
               placeholder="Nhập ít nhất 6 ký tự"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="pastorName" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+              Họ và tên Linh mục
+            </label>
+            <input
+              id="pastorName"
+              type="text"
+              className="form-control"
+              placeholder="Ví dụ: Lm. Giuse Nguyễn Văn A"
+              value={pastorName}
+              onChange={(e) => setPastorName(e.target.value)}
+              required
+              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="pastorPhone" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+              Số điện thoại liên hệ
+            </label>
+            <input
+              id="pastorPhone"
+              type="tel"
+              className="form-control"
+              placeholder="Ví dụ: 0912345678"
+              value={pastorPhone}
+              onChange={(e) => setPastorPhone(e.target.value)}
+              required
+              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="pastorTitle" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+              Chức vụ tôn giáo
+            </label>
+            <input
+              id="pastorTitle"
+              type="text"
+              className="form-control"
+              placeholder="Ví dụ: Linh mục Quản xứ"
+              value={pastorTitle}
+              onChange={(e) => setPastorTitle(e.target.value)}
               required
               style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
             />
