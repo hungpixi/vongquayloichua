@@ -1,0 +1,1 @@
+"Add isSmallScreen state to ParishionerWheel.tsx"

@@ -956,36 +956,44 @@ export const ParishionerWheel: React.FC = () => {
   // Tự động bỏ câm và phát nhạc nền BGM khi có tương tác click/touch đầu tiên trên màn hình
   useEffect(() => {
     const handleFirstUserInteraction = () => {
-      if (wheel && wheel.bgm_enabled && bgmAudioRef.current) {
-        const audio = bgmAudioRef.current;
-        const isMutedPref = localStorage.getItem('bgm_muted') === 'true';
-        if (!isMutedPref && audio.muted) {
-          initAudio();
-          audio.muted = false;
-          setIsBgmMuted(false);
-          
-          if (audio.paused && !bgmPlayPromiseRef.current) {
-            const promise = audio.play();
-            if (promise !== undefined) {
-              bgmPlayPromiseRef.current = promise;
-              promise
-                .then(() => {
-                  bgmPlayPromiseRef.current = null;
-                  if (isMountedRef.current) {
-                    setIsBgmPlaying(true);
-                  }
-                })
-                .catch(err => {
-                  bgmPlayPromiseRef.current = null;
-                  console.warn('BGM interaction play failed:', err);
-                });
+      // Chỉ gỡ bỏ listener khi BGM audio đã sẵn sàng hoặc nếu wheel không cho phép BGM
+      if (wheel) {
+        if (!wheel.bgm_enabled) {
+          document.removeEventListener('click', handleFirstUserInteraction);
+          document.removeEventListener('touchstart', handleFirstUserInteraction);
+          return;
+        }
+
+        if (bgmAudioRef.current) {
+          const audio = bgmAudioRef.current;
+          const isMutedPref = localStorage.getItem('bgm_muted') === 'true';
+          if (!isMutedPref) {
+            initAudio();
+            audio.muted = false;
+            setIsBgmMuted(false);
+            
+            if (audio.paused && !bgmPlayPromiseRef.current) {
+              const promise = audio.play();
+              if (promise !== undefined) {
+                bgmPlayPromiseRef.current = promise;
+                promise
+                  .then(() => {
+                    bgmPlayPromiseRef.current = null;
+                    if (isMountedRef.current) {
+                      setIsBgmPlaying(true);
+                    }
+                  })
+                  .catch(err => {
+                    bgmPlayPromiseRef.current = null;
+                    console.warn('BGM interaction play failed:', err);
+                  });
+              }
             }
           }
+          document.removeEventListener('click', handleFirstUserInteraction);
+          document.removeEventListener('touchstart', handleFirstUserInteraction);
         }
       }
-      // Loại bỏ lắng nghe sau tương tác đầu tiên
-      document.removeEventListener('click', handleFirstUserInteraction);
-      document.removeEventListener('touchstart', handleFirstUserInteraction);
     };
 
     document.addEventListener('click', handleFirstUserInteraction);
@@ -1117,9 +1125,9 @@ export const ParishionerWheel: React.FC = () => {
 
     initAudio();
 
-    // Kích hoạt BGM nếu được bật và đang bị browser block/mute, nhưng chỉ khi người dùng không chọn tắt tiếng trước đó
+    // Kích hoạt BGM nếu được bật, nhưng chỉ khi người dùng không chọn tắt tiếng trước đó
     const isMutedPref = localStorage.getItem('bgm_muted') === 'true';
-    if (wheel.bgm_enabled && bgmAudioRef.current && !isMutedPref && bgmAudioRef.current.muted) {
+    if (wheel.bgm_enabled && bgmAudioRef.current && !isMutedPref) {
       const audio = bgmAudioRef.current;
       audio.muted = false;
       setIsBgmMuted(false);

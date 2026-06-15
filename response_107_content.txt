@@ -1,0 +1,65 @@
+Created At: 2026-06-15T02:04:05Z
+Completed At: 2026-06-15T02:04:05Z
+File Path: `file:///D:/khoinghiep/vongquay/src/pages/ParishionerWheel.tsx`
+Total Lines: 1024
+Total Bytes: 41380
+Showing lines 720 to 800
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+720:         <div style={{
+721:           flex: 1,
+722:           width: '100%',
+723:           display: 'flex',
+724:           flexDirection: 'column',
+725:           border: wheel.theme_preset === 'christmas' ? '6px double #F59E0B' : `2px solid ${borderGold}`,
+726:           borderRadius: isSmallScreen ? '16px' : '20px',
+727:           padding: isSmallScreen ? '16px' : '24px 20px',
+728:           background: 'radial-gradient(circle at center, #FFFDF6 0%, #FFF5DB 100%)',
+729:           color: 'var(--color-text-dark)',
+730:           boxShadow: !isMobile
+731:             ? '0 24px 64px rgba(0, 0, 0, 0.65), 0 0 40px rgba(216, 180, 63, 0.15)'
+732:             : (wheel.theme_preset === 'christmas'
+733:               ? '0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 60px rgba(245, 158, 11, 0.15)'
+734:               : '0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 60px rgba(216, 180, 63, 0.12)'),
+735:           position: 'relative',
+736:           overflow: 'hidden'
+737:         }}>
+738:           {/* Subtle decorative corners inside the main page wrapper */}
+739:           <div className="corner-ornament top-left" style={{ borderColor: borderGold, borderTopStyle: 'solid', borderLeftStyle: 'solid', borderTopWidth: '2.5px', borderLeftWidth: '2.5px', top: isSmallScreen ? '8px' : '12px', left: isSmallScreen ? '8px' : '12px', width: '16px', height: '16px', position: 'absolute' }}></div>
+740:           <div className="corner-ornament top-right" style={{ borderColor: borderGold, borderTopStyle: 'solid', borderRightStyle: 'solid', borderTopWidth: '2.5px', borderRightWidth: '2
+<truncated 2273 bytes>
+:               letterSpacing: isSmallScreen ? '1.5px' : '2px',
+767:               textAlign: 'center',
+768:               lineHeight: 1.3
+769:             }}>
+770:               {parish?.name}
+771:             </div>
+772:             <h2 className="public-event-title" style={{
+773:               fontFamily: "'Playfair Display', Georgia, serif",
+774:               fontSize: isSmallScreen ? '22px' : '28px',
+775:               fontWeight: 800,
+776:               color: getThemeColors(wheel.theme_preset)[0],
+777:               textAlign: 'center',
+778:               margin: '2px 0 6px 0',
+779:               lineHeight: 1.25,
+780:               textShadow: '0 1px 1px rgba(255, 255, 255, 0.8)'
+781:             }}>
+782:               {wheel.title}
+783:             </h2>
+784:             <p className="public-description" style={{
+785:               fontSize: isSmallScreen ? '14px' : '15.5px', // optimized readability for elderly
+786:               color: '#2D3748', // high-contrast text color
+787:               fontWeight: 500,
+788:               maxWidth: '520px',
+789:               margin: '0 auto',
+790:               lineHeight: isSmallScreen ? '1.45' : '1.6',
+791:               textAlign: 'center'
+792:             }}>
+793:               {lockedBlessing 
+794:                 ? 'Bạn đã nhận Lộc Lời Chúa hôm nay. Mỗi người nhận một Lộc Thánh duy nhất.' 
+795:                 : wheel.description || 'Xin nhấn nút dưới đây để đón nhận ân sủng Lộc Lời Chúa dành riêng cho quý vị.'}
+796:             </p>
+797:           </header>
+798: 
+799:           {/* Main Wheel Canvas Section */}
+800:           <div className="wheel-wrapper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', margin: isSmallScreen ? '8px 0' : '16px 0', flex: 1 }}>
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

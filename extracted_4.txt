@@ -1,0 +1,92 @@
+Created At: 2026-06-15T02:00:34Z
+Completed At: 2026-06-15T02:00:34Z
+File Path: `file:///D:/khoinghiep/vongquay/src/pages/ParishionerWheel.tsx`
+Total Lines: 1129
+Total Bytes: 46388
+Showing lines 800 to 1129
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+800:                   textAlign: 'center',
+801:                   textShadow: '0 1px 0 rgba(255, 255, 255, 0.5)',
+802:                   transition: 'transform 0.1s ease'
+803:                 }}
+804:               >
+805:                 {isSpinning ? 'ĐANG QUAY' : 'QUAY LỘC'}
+806:               </button>
+807:             )}
+808:           </div>
+809:         </div>
+810: 
+811:         {/* Warning/Info display for Locked user */}
+812:         {lockedBlessing && (
+813:           <div style={{ textAlign: 'center', margin: '8px 0 16px 0', padding: '0 16px' }}>
+814:             <button 
+815:               onClick={handleOpenLockedModal} 
+816:               className="btn" 
+817:               style={{ 
+818:                 background: `linear-gradient(135deg, ${getThemeColors(wheel.theme_preset)[0]} 0%, ${getThemeColors(wheel.theme_preset)[4]} 100%)`,
+819:                 color: '#FFFFFF',
+820:                 border: `1.5px solid ${getThemeColors(wheel.theme_preset)[1]}`,
+821:                 gap: '8px',
+822:                 display: 'inline-flex',
+823:                 alignItems: 'center',
+824:                 padding: '10px 20px',
+825:                 fontSize: '14.5px',
+826:                 fontWeight: '700',
+827:                 borderRadius: '30px',
+828:                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)',
+829:                 cursor: 'pointer'
+830:               }}
+831:             >
+832:               <Church size={16} style={{ color: getThemeColors(wheel.theme_preset)[1] }} />
+833:               Xem lại Lộc Thánh của b
+<truncated 13024 bytes>
+    height: '40px', 
+1082:                     borderRadius: '12px', 
+1083:                     background: '#F3F4F6', 
+1084:                     color: '#4B5563', 
+1085:                     border: 'none',
+1086:                     fontSize: '13px',
+1087:                     fontWeight: '500'
+1088:                   }}
+1089:                 >
+1090:                   Đóng
+1091:                 </button>
+1092:               </div>
+1093: 
+1094:             </div>
+1095:           </div>
+1096:         );
+1097:       })()}
+1098: 
+1099:       {/* Footer Banner Promotion (Graceful footer banner) */}
+1100:       {!isAdClosed && (
+1101:         <div className="footer-ad-banner" style={{ borderTopColor: getThemeColors(wheel.theme_preset)[1] }}>
+1102:           <div className="ad-content">
+1103:             <span className="ad-logo-badge">Giờ Cha Chờ</span>
+1104:             <span className="ad-text">Đồng hành cùng đức tin Công giáo. Tìm nhanh giờ Thánh Lễ & Giờ Xưng Tội gần nhất.</span>
+1105:             <a
+1106:               href="https://play.google.com/store/apps/details?id=com.anonymous.churchfindernative"
+1107:               target="_blank"
+1108:               rel="noopener noreferrer"
+1109:               className="ad-link-btn"
+1110:             >
+1111:               Tải miễn phí
+1112:             </a>
+1113:             <button onClick={() => setIsAdClosed(true)} className="ad-close-btn" title="Đóng quảng cáo">
+1114:               <X size={14} />
+1115:             </button>
+1116:           </div>
+1117:         </div>
+1118:       )}
+1119: 
+1120:       {/* Toast popup */}
+1121:       {toast && (
+1122:         <div className="toast-notification">
+1123:           {toast}
+1124:         </div>
+1125:       )}
+1126:     </div>
+1127:   );
+1128: };
+1129: 
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

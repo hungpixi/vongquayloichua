@@ -1,0 +1,49 @@
+Created At: 2026-06-15T02:03:52Z
+Completed At: 2026-06-15T02:03:52Z
+File Path: `file:///D:/khoinghiep/vongquay/src/pages/ParishionerWheel.tsx`
+Total Lines: 1330
+Total Bytes: 53635
+Showing lines 990 to 1030
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+990:         <AlertTriangle size={48} style={{ color: 'var(--color-error)' }} />
+991:         <h3 style={{ fontSize: '18px', color: 'var(--color-text-dark)', fontWeight: '700' }}>{error || 'Đường dẫn không tồn tại.'}</h3>
+992:         <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Vui lòng liên hệ với Ban Truyền Thông Giáo xứ để nhận đường dẫn chính xác.</p>
+993:         <Link to="/" className="btn btn-primary">
+994:           Về Trang Chủ
+995:         </Link>
+996:       </div>
+997:     );
+998:   }
+999: 
+1000:   const borderGold = wheel.theme_preset === 'christmas' ? '#F59E0B' : getThemeColors(wheel.theme_preset)[1];
+1001: 
+1002:   return (
+1003:     <div className={wheel.theme_preset === 'christmas' ? "public-layout theme-christmas-layout" : "public-layout"} style={{
+1004:       ...getLayoutBackground(wheel.theme_preset),
+1005:       minHeight: '100vh',
+1006:       display: 'flex',
+1007:       flexDirection: 'column',
+1008:       justifyContent: 'center',
+1009:       alignItems: 'center',
+1010:       padding: isMobile ? '12px' : '40px 24px',
+1011:       color: '#FFFFFF'
+1012:     }}>
+1013:       {/* Outer Row/Column Layout wrapper */}
+1014:       <div style={{
+1015:         display: 'flex',
+1016:         flexDirection: isMobile ? 'column' : 'row',
+1017:         alignItems: isMobile ? 'center' : 'stretch',
+1018:         justifyContent: 'center',
+1019:         gap: isMobile ? '16px' : '24px',
+1020:         width: '100%',
+1021:         maxWidth: isMobile ? '500px' : (showWinnerModal && winnerBlessing ? '1000px' : '540px'),
+1022:         margin: '0 auto',
+1023:         paddingBottom: !isAdClosed ? '60px' : '0'
+1024:       }}>
+1025:         {/* Left/Top: Wheel Card */}
+1026:         <div style={{
+1027:           flex: 1,
+1028:           width: '100%',
+1029:           display: 'flex',
+1030:           flexDirection: 'column',
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

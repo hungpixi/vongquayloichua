@@ -1,0 +1,24 @@
+Created At: 2026-06-15T02:03:37Z
+Completed At: 2026-06-15T02:03:37Z
+File Path: `file:///D:/khoinghiep/vongquay/src/pages/ParishionerWheel.tsx`
+Total Lines: 1267
+Total Bytes: 51203
+Showing lines 130 to 145
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+130:   const velocityRef = useRef(0);
+131:   const animationFrameIdRef = useRef<number | null>(null);
+132:   const isMountedRef = useRef(true);
+133:   const isSpinningRef = useRef(false);
+134:   const spinLoopRef = useRef<((colors: string[], targetRotation: number) => void) | null>(null);
+135:   
+136:   // Modal ref for screenshot download
+137:   const modalContentRef = useRef<HTMLDivElement | null>(null);
+138: 
+139:   // Bảng màu thiết kế đồng bộ với Giờ Cha Chờ và Phụng vụ
+140:   const getThemeColors = (preset: string) => {
+141:     switch (preset) {
+142:       case 'christmas':
+143:         return ['#D8B43F', '#9E1B1B', '#0F5E3D', '#FFFFFF', '#0E4B75'];
+144:       case 'red': // Lễ Hiện Xuống
+145:         return ['#7F1D1D', '#D8B43F', '#450a0a', '#FFF8E8', '#991b1b', '#E6B93D'];
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

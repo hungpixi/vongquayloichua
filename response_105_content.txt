@@ -1,0 +1,59 @@
+Created At: 2026-06-15T02:04:00Z
+Completed At: 2026-06-15T02:04:00Z
+File Path: `file:///D:/khoinghiep/vongquay/src/pages/ParishionerWheel.tsx`
+Total Lines: 1330
+Total Bytes: 53635
+Showing lines 670 to 720
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+670:   const renderBlessingCard = (isModal: boolean) => {
+671:     if (!winnerBlessing || !wheel) return null;
+672:     const textLength = winnerBlessing.text?.length || 0;
+673:     const fontSize = textLength > 150 ? '14px' : textLength > 100 ? '15.5px' : '17.5px';
+674:     const presetColors = getThemeColors(wheel.theme_preset);
+675: 
+676:     const cardContent = (
+677:       <div 
+678:         className="winner-card" 
+679:         onClick={isModal ? (e) => e.stopPropagation() : undefined}
+680:         style={{ 
+681:           background: 'transparent', 
+682:           border: 'none', 
+683:           boxShadow: 'none', 
+684:           display: 'flex', 
+685:           flexDirection: 'column', 
+686:           gap: '16px',
+687:           width: '100%',
+688:           maxWidth: '430px',
+689:           position: isModal ? 'relative' : undefined,
+690:           flexShrink: isModal ? undefined : 0
+691:         }}
+692:       >
+693:         {/* Nút đóng nhanh góc trên bên phải - Accessible Close Button */}
+694:         {(!lockedBlessing || isModal) && (
+695:           <button
+696:             onClick={() => {
+697:               setShowWinnerModal(false);
+698:               if (!isModal) {
+699:                 setWinnerBlessing(null);
+700:               }
+701:             }}
+702:             aria-label="Đóng"
+703:             style={{
+704:               position: 'absolute',
+705:               top: '-12px',
+706:               right: '-12px',
+707:               width: '36px',
+708:               height: '36px',
+709:               borderRadius: '50%',
+710:               background: '#FFFFFF',
+711:               border: `1.5px solid ${wheel.theme_preset === 'christmas' ? '#F59E0B' : presetColors[1]}`,
+712:               color: presetColors[0],
+713:               display: 'flex',
+714:               alignItems: 'center',
+715:               justifyContent: 'center',
+716:               cursor: 'pointer',
+717:               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+718:               zIndex: 1010,
+719:               transition: 'transform 0.1s ease',
+720:               padding: 0
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

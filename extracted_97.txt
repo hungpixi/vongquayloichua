@@ -1,0 +1,68 @@
+Created At: 2026-06-15T02:03:55Z
+Completed At: 2026-06-15T02:03:55Z
+File Path: `file:///D:/khoinghiep/vongquay/src/pages/ParishionerWheel.tsx`
+Total Lines: 1330
+Total Bytes: 53635
+Showing lines 1100 to 1180
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1100:                 ? 'Bạn đã nhận Lộc Lời Chúa hôm nay. Mỗi người nhận một Lộc Thánh duy nhất.' 
+1101:                 : wheel.description || 'Xin nhấn nút dưới đây để đón nhận ân sủng Lộc Lời Chúa dành riêng cho quý vị.'}
+1102:             </p>
+1103:           </header>
+1104: 
+1105:           {/* Main Wheel Canvas Section */}
+1106:           <div className="wheel-wrapper" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', margin: isSmallScreen ? '8px 0' : '16px 0', flex: 1 }}>
+1107:             <div className="wheel-container" style={{
+1108:               position: 'relative',
+1109:               width: '440px',
+1110:               height: '440px',
+1111:               maxWidth: '85vw',
+1112:               maxHeight: '85vw',
+1113:               borderRadius: '50%',
+1114:               boxShadow: '0 20px 48px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(216, 180, 63, 0.25)',
+1115:               background: '#FFFFFF',
+1116:               padding: '8px',
+1117:               borderColor: wheel.theme_preset === 'christmas' ? '#F59E0B' : getThemeColors(wheel.theme_preset)[1],
+1118:               borderWidth: '8px',
+1119:               borderStyle: 'double'
+1120:             }}>
+1121:               <canvas ref={canvasRef} id="wheel-canvas" width="600" height="600" style={{ width: '100%', height: '100%', borderRadius: '50%', display: 'block' }}></canvas>
+1122:               
+1123:               {/* Polished Gold/Brass Pointer */}
+1124:               <div className="wheel-pointer" style={
+<truncated 1365 bytes>
+L 22 23 Z" 
+1148:                       fill="url(#goldMetallicGradient)" 
+1149:                       filter="url(#goldPointerShadow)"
+1150:                       stroke="#FFF5D1"
+1151:                       strokeWidth="1.2"
+1152:                     />
+1153:                     <circle cx="28" cy="20" r="3" fill="#FFFFFF" style={{ filter: 'drop-shadow(0 0 2px #FFEFA6)' }} />
+1154:                   </svg>
+1155:                 ) : (
+1156:                   <svg viewBox="0 0 40 40" width="48" height="48">
+1157:                     <defs>
+1158:                       <linearGradient id="goldMetallicGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+1159:                         <stop offset="0%" stopColor="#FFEFA6" />
+1160:                         <stop offset="35%" stopColor="#D8B43F" />
+1161:                         <stop offset="100%" stopColor="#8A6F1C" />
+1162:                       </linearGradient>
+1163:                       <filter id="goldPointerShadow" x="-25%" y="-25%" width="150%" height="150%">
+1164:                         <feDropShadow dx="1" dy="2" stdDeviation="1.5" floodOpacity="0.4"/>
+1165:                       </filter>
+1166:                     </defs>
+1167:                     <path 
+1168:                       d="M 6 20 L 24 9 C 30 6, 36 11, 36 20 C 36 29, 30 34, 24 31 Z" 
+1169:                       fill="url(#goldMetallicGradient)" 
+1170:                       filter="url(#goldPointerShadow)"
+1171:                       stroke="#FFF5D1"
+1172:                       strokeWidth="1.2"
+1173:                     />
+1174:                     <path
+1175:                       d="M 26 14 H 28 V 26 H 26 Z M 23 18 H 31 V 20 H 23 Z"
+1176:                       fill="#5C470D"
+1177:                     />
+1178:                   </svg>
+1179:                 )}
+1180:               </div>
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
