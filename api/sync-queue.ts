@@ -133,7 +133,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       try {
         const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        if (user && !userError) {
+        // Only allow if user has system_admin or parish_admin role
+        if (user && !userError && (user.app_metadata?.role === 'system_admin' || user.app_metadata?.role === 'parish_admin')) {
           isAuthorized = true;
         }
       } catch (err) {
@@ -177,27 +178,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, message: 'Sync already in progress (lock active)' });
     }
 
-    let itemsProcessed = 0;
     let itemsSuccess = 0;
     let itemsFailed = 0;
     let itemsSkipped = 0;
+    const transientFailedRecords: SpinQueueItem[] = [];
 
     try {
-      // 5. Read the tail 200 items from the queue (FIFO)
-      const rangeResponse = await fetch(redisUrl, {
+      // 5. Pop a batch of 200 items from the queue (FIFO via RPOP)
+      const popResponse = await fetch(redisUrl, {
         method: 'POST',
         headers: redisHeaders,
-        body: JSON.stringify(['LRANGE', queueKey, '-200', '-1'])
+        body: JSON.stringify(['RPOP', queueKey, '200'])
       });
 
-      if (!rangeResponse.ok) {
-        throw new Error(`Failed to fetch range from Redis: ${rangeResponse.statusText}`);
+      if (!popResponse.ok) {
+        throw new Error(`Failed to pop from Redis: ${popResponse.statusText}`);
       }
 
-      const rangeResult = await rangeResponse.json();
-      const rawItems = rangeResult.result || [];
+      const popResult = await popResponse.json();
+      let rawItems = popResult.result;
 
-      if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      if (!rawItems) {
+        rawItems = [];
+      } else if (!Array.isArray(rawItems)) {
+        rawItems = [rawItems];
+      }
+
+      if (rawItems.length === 0) {
         // Queue is empty, release lock and return
         await fetch(redisUrl, {
           method: 'POST',
@@ -209,7 +216,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const K = rawItems.length;
-      console.log(`[Sync Worker] Found ${K} items in queue. Starting sync...`);
+      console.log(`[Sync Worker] Popped ${K} items from queue. Starting sync...`);
 
       // Parse queue items
       const parsedRecords = rawItems.map((rawItem: unknown) => {
@@ -232,7 +239,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       // Filter out totally corrupt records (null or missing wheel_id)
-      const validRecords = parsedRecords.filter((rec): rec is NonNullable<typeof rec> => rec !== null && !!rec.wheel_id);
+      const validRecords = parsedRecords.filter((rec: typeof parsedRecords[number]): rec is NonNullable<typeof rec> => rec !== null && !!rec.wheel_id);
       const corruptCount = K - validRecords.length;
       itemsSkipped += corruptCount;
 
@@ -245,22 +252,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!bulkError) {
           // Bulk insert succeeded completely
           itemsSuccess += validRecords.length;
-          itemsProcessed = K;
           console.log(`[Sync Worker] Successfully bulk inserted ${validRecords.length} records.`);
         } else {
           console.warn('[Sync Worker] Bulk insert failed, falling back to individual inserts:', bulkError);
 
-          // If bulk insert fails, process individually from oldest to newest (index K-1 down to 0)
-          // parsedRecords contains items in the order: newer -> older.
-          // So we iterate backwards to process oldest first.
-          for (let i = parsedRecords.length - 1; i >= 0; i--) {
-            const record = parsedRecords[i];
-            if (!record) {
-              // Corrupt record, count as processed and proceed
-              itemsProcessed++;
-              continue;
-            }
-
+          // If bulk insert fails, process individually
+          for (const record of validRecords) {
             try {
               const { error: singleError } = await supabase
                 .from('spin_history')
@@ -268,7 +265,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
               if (!singleError) {
                 itemsSuccess++;
-                itemsProcessed++;
               } else {
                 // Check if error is due to missing foreign key
                 if (singleError.code === '23503' && record.blessing_id) {
@@ -280,56 +276,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
                   if (!retryError) {
                     itemsSuccess++;
-                    itemsProcessed++;
                     continue;
                   }
                   
                   console.error('[Sync Worker] Failed retry with null blessing_id:', retryError);
                   if (isPermanentError(retryError.code)) {
                     itemsFailed++;
-                    itemsProcessed++; // Count as processed because it is a permanent error
                   } else {
-                    // Transient error (e.g. database offline), stop processing to retry later
-                    console.error('[Sync Worker] Transient error on retry. Aborting batch sync.');
-                    break;
+                    transientFailedRecords.push(record);
                   }
                 } else if (isPermanentError(singleError.code)) {
                   console.error(`[Sync Worker] Permanent error for record ${record.id}:`, singleError);
                   itemsFailed++;
-                  itemsProcessed++; // Permanent data error, count as processed to avoid queue blockage
                 } else {
-                  // Transient error (e.g. database offline), stop processing to retry later
-                  console.error(`[Sync Worker] Transient database error for record ${record.id}. Aborting batch sync.`, singleError);
-                  break;
+                  console.error(`[Sync Worker] Transient database error for record ${record.id}:`, singleError);
+                  transientFailedRecords.push(record);
                 }
               }
             } catch (err) {
               console.error(`[Sync Worker] Exception for record ${record.id}:`, err);
-              // Exceptions are usually transient unless it's a code issue
-              break;
+              transientFailedRecords.push(record);
             }
           }
         }
-      } else {
-        // All items in range were corrupt/null
-        itemsProcessed = K;
       }
 
-      // 7. Trim successfully processed items from Redis queue
-      if (itemsProcessed > 0) {
-        // Trim elements from the end of the queue
-        // LTRIM key 0 -(itemsProcessed + 1)
-        const trimResponse = await fetch(redisUrl, {
+      // 7. Re-queue transient failed records to Redis queue via RPUSH (maintaining FIFO order since we RPOP)
+      if (transientFailedRecords.length > 0) {
+        console.log(`[Sync Worker] Re-queueing ${transientFailedRecords.length} transiently failed records.`);
+        const requeueCommands = transientFailedRecords.map(rec => ['RPUSH', queueKey, JSON.stringify(rec)]);
+        await fetch(redisUrl, {
           method: 'POST',
           headers: redisHeaders,
-          body: JSON.stringify(['LTRIM', queueKey, '0', `-${itemsProcessed + 1}`])
+          body: JSON.stringify(requeueCommands)
         });
-
-        if (!trimResponse.ok) {
-          console.error(`[Sync Worker] Failed to LTRIM queue: ${trimResponse.statusText}`);
-        } else {
-          console.log(`[Sync Worker] Successfully trimmed ${itemsProcessed} items from queue.`);
-        }
       }
 
       // 8. Release the Redis distributed lock
@@ -345,7 +325,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         syncedCount: itemsSuccess,
         failedCount: itemsFailed,
         skippedCount: itemsSkipped,
-        message: `Synced ${itemsSuccess} spins. Skipped/failed ${itemsSkipped + itemsFailed} items.`
+        requeuedCount: transientFailedRecords.length,
+        message: `Synced ${itemsSuccess} spins. Re-queued ${transientFailedRecords.length} spins. Skipped/failed ${itemsSkipped + itemsFailed} items.`
       });
 
     } catch (innerError: unknown) {

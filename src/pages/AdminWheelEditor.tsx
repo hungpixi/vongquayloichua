@@ -1,12 +1,110 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dbService } from '../services/db';
+import { supabase } from '../services/supabaseClient';
 import type { Wheel, Blessing, SpinHistory } from '../services/db';
-import { ArrowLeft, Save, Sparkles, BarChart3, Settings, Loader, Trash2, ShieldAlert, Gift, BookOpen, Volume2, Music, Play, Square } from 'lucide-react';
-import { BGM_OPTIONS, SPIN_SFX_OPTIONS, WIN_SFX_OPTIONS, playSynthesizedSpinSFX, playSynthesizedWinSFX, RELIGIOUS_ICONS } from '../utils/audioHelper';
+import {
+  ArrowLeft,
+  Save,
+  Sparkles,
+  BarChart3,
+  Settings,
+  Loader,
+  Trash2,
+  ShieldAlert,
+  Gift,
+  BookOpen,
+  Volume2,
+  Music,
+  Play,
+  Square,
+  Edit,
+  Plus,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  FileText,
+  RotateCcw,
+  Check,
+  X
+} from 'lucide-react';
+import {
+  BGM_OPTIONS,
+  SPIN_SFX_OPTIONS,
+  WIN_SFX_OPTIONS,
+  playSynthesizedSpinSFX,
+  playSynthesizedWinSFX,
+  RELIGIOUS_ICONS
+} from '../utils/audioHelper';
+import {
+  DEFAULT_BLESSINGS,
+  CHRISTMAS_BLESSINGS,
+  EASTER_BLESSINGS,
+  PENTECOST_BLESSINGS,
+  LENT_BLESSINGS,
+  ADVENT_BLESSINGS,
+  MARIAN_BLESSINGS,
+  ST_JOSEPH_BLESSINGS,
+  EUCHARIST_BLESSINGS
+} from '../utils/blessingsData';
 
-// Hàm tính toán màu chữ tương phản cao dựa trên độ sáng nền
+// Component vẽ hoa văn góc cho thiệp Lộc Lời Chúa dạng vector sắc nét
+const CornerOrnamentSVG: React.FC<{ style?: React.CSSProperties; isChristmas?: boolean }> = ({ style, isChristmas }) => {
+  if (isChristmas) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        style={{
+          position: 'absolute',
+          width: '24px',
+          height: '24px',
+          color: 'inherit',
+          pointerEvents: 'none',
+          ...style
+        }}
+      >
+        <path
+          d="M2 2h14M2 2v14M5 5h8M5 5v8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M8 2.5 L9.2 6 L12.7 7.2 L9.2 8.4 L8 11.9 L6.8 8.4 L3.3 7.2 L6.8 6 Z"
+          fill="currentColor"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      style={{
+        position: 'absolute',
+        width: '20px',
+        height: '20px',
+        color: 'inherit',
+        pointerEvents: 'none',
+        ...style
+      }}
+    >
+      <path
+        d="M2 2h16M2 2v16M5 5h10M5 5v10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <circle cx="5" cy="5" r="1.5" fill="currentColor" />
+    </svg>
+  );
+};
+
+// Hàm tính toán màu chữ tương phản cao dựa trên độ sáng nền (cho lát vòng quay)
 const getTextContrastColor = (bgColor: string, themePreset?: string) => {
   const hex = bgColor.replace('#', '');
   if (hex.length !== 6) return '#FFFFFF';
@@ -14,7 +112,7 @@ const getTextContrastColor = (bgColor: string, themePreset?: string) => {
   const g = parseInt(hex.substring(2, 4), 16);
   const b = parseInt(hex.substring(4, 6), 16);
   const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  
+
   if (brightness >= 165) {
     switch (themePreset) {
       case 'easter':
@@ -32,6 +130,33 @@ const getTextContrastColor = (bgColor: string, themePreset?: string) => {
   } else {
     return '#FFF8E8'; // Trả về màu kem sáng để có độ ấm áp và dễ đọc tối đa trên nền tối
   }
+};
+
+// Hàm lấy màu tối tương phản tốt cho chữ/viền trên nền sáng (thiệp lộc)
+const getDarkContrastColor = (color: string, themePreset?: string) => {
+  const hex = color.replace('#', '');
+  if (hex.length !== 6) return '#0F3D2E';
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+  if (brightness >= 165) {
+    switch (themePreset) {
+      case 'easter':
+        return '#3E2723';
+      case 'eucharist':
+        return '#4E2A0F';
+      case 'christmas':
+        return '#0A3B24';
+      case 'tet':
+      case 'pentecost':
+        return '#5C0606';
+      default:
+        return '#0F3D2E';
+    }
+  }
+  return color;
 };
 
 const PRESET_OPTIONS: {
@@ -63,10 +188,20 @@ export const AdminWheelEditor: React.FC = () => {
   const { user, parish } = useAuth();
   const navigate = useNavigate();
 
+  const [loading, setLoading] = useState(true);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToastMsg = React.useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }, [setToast]);
+
   const [wheel, setWheel] = useState<Wheel | null>(null);
   const [blessings, setBlessings] = useState<Blessing[]>([]);
   const [history, setHistory] = useState<SpinHistory[]>([]);
-  
+
   // Form States
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -76,7 +211,7 @@ export const AdminWheelEditor: React.FC = () => {
   const [enableSound, setEnableSound] = useState(true);
   const [lockDuration, setLockDuration] = useState('24h');
   const [backgroundUrl, setBackgroundUrl] = useState('');
-  
+
   // DIY Audio States
   const [bgmEnabled, setBgmEnabled] = useState(false);
   const [bgmType, setBgmType] = useState('schubert-ave-maria');
@@ -90,7 +225,36 @@ export const AdminWheelEditor: React.FC = () => {
   const [displaySlots, setDisplaySlots] = useState(12);
   const [slotDisplayType, setSlotDisplayType] = useState('mixed');
 
-  // Preview states
+  // Cấu hình thiệp lộc mới
+  const [cardTemplate, setCardTemplate] = useState('default');
+  const [cardTextColor, setCardTextColor] = useState('');
+  const [cardFontSize, setCardFontSize] = useState('16');
+  const [cardGreeting, setCardGreeting] = useState('');
+
+  // UI & Chế độ nhập liệu danh sách lộc
+  const [editorMode, setEditorMode] = useState<'list' | 'bulk'>('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+
+  // State cho Thêm mới & Sửa inline câu lộc
+  const [newCategory, setNewCategory] = useState('');
+  const [newQuote, setNewQuote] = useState('');
+  const [newText, setNewText] = useState('');
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCategory, setEditCategory] = useState('');
+  const [editQuote, setEditQuote] = useState('');
+  const [editText, setEditText] = useState('');
+
+  // State cho Quay thử (Test Spin)
+  const [rotationAngle, setRotationAngle] = useState(0);
+  const [isTestSpinning, setIsTestSpinning] = useState(false);
+  const [testWinner, setTestWinner] = useState<Blessing | null>(null);
+  const [showTestWinnerModal, setShowTestWinnerModal] = useState(false);
+  const testSpinAngleRef = useRef(0);
+
+  // Preview BGM
   const [isBgmPreviewPlaying, setIsBgmPreviewPlaying] = useState(false);
   const previewAudioRef = React.useRef<HTMLAudioElement | null>(null);
   const previewAudioContextRef = React.useRef<AudioContext | null>(null);
@@ -115,26 +279,249 @@ export const AdminWheelEditor: React.FC = () => {
       setCheckingSlug(false);
     }
   };
-  
-  const [loading, setLoading] = useState(true);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+
+  // Draft States & Recover/Auto-Save handlers
+  const [hasDraft, setHasDraft] = useState(false);
+  const [draftTime, setDraftTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (wheelId) {
+      const savedDraft = localStorage.getItem(`vqlc_draft_${wheelId}`);
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft);
+          if (parsed.updatedAt) {
+            Promise.resolve().then(() => {
+              setHasDraft(true);
+              setDraftTime(new Date(parsed.updatedAt).toLocaleString('vi-VN'));
+            });
+          }
+        } catch (e) {
+          console.error('Error parsing draft on load:', e);
+        }
+      }
+    }
+  }, [wheelId]);
+
+  const handleRecoverDraft = () => {
+    if (!wheelId) return;
+    const savedDraft = localStorage.getItem(`vqlc_draft_${wheelId}`);
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        setTitle(parsed.title ?? '');
+        setSlug(parsed.slug ?? '');
+        setDesc(parsed.desc ?? '');
+        setThemePreset(parsed.themePreset ?? 'gold');
+        setEnableConfetti(parsed.enableConfetti ?? true);
+        setEnableSound(parsed.enableSound ?? true);
+        setLockDuration(parsed.lockDuration ?? '24h');
+        setBackgroundUrl(parsed.backgroundUrl ?? '');
+        setBgmEnabled(parsed.bgmEnabled ?? false);
+        setBgmType(parsed.bgmType ?? 'schubert-ave-maria');
+        setBgmVolume(parsed.bgmVolume ?? 0.3);
+        setSpinSfxType(parsed.spinSfxType ?? 'tick');
+        setWinSfxType(parsed.winSfxType ?? 'fanfare');
+        setCustomBgmUrl(parsed.customBgmUrl ?? '');
+        setCustomWinSfxUrl(parsed.customWinSfxUrl ?? '');
+        setDisplaySlots(parsed.displaySlots ?? 12);
+        setSlotDisplayType(parsed.slotDisplayType ?? 'mixed');
+        setCardTemplate(parsed.cardTemplate ?? 'default');
+        setCardTextColor(parsed.cardTextColor ?? '');
+        setCardFontSize(parsed.cardFontSize ?? '16');
+        setCardGreeting(parsed.cardGreeting ?? '');
+        if (parsed.blessings) {
+          setBlessings(parsed.blessings);
+          const textLines = parsed.blessings.map((item: Blessing) => {
+            const cat = item.category || 'Mục';
+            const q = item.quote || '';
+            return `${cat} | ${q} | ${item.text}`;
+          });
+          setRawText(textLines.join('\n'));
+        }
+        setHasDraft(false);
+        showToastMsg('Đã khôi phục bản nháp thành công!');
+      } catch (e) {
+        console.error('Error recovering draft:', e);
+        alert('Khôi phục bản nháp thất bại.');
+      }
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    if (!wheelId) return;
+    if (window.confirm('Bạn có chắc chắn muốn xóa bản nháp này?')) {
+      localStorage.removeItem(`vqlc_draft_${wheelId}`);
+      setHasDraft(false);
+      showToastMsg('Đã xóa bản nháp.');
+    }
+  };
+
+  // Debounced auto-save effect
+  useEffect(() => {
+    if (loading || !wheelId || !wheel || hasDraft) return;
+
+    const saveTimer = setTimeout(() => {
+      const draftData = {
+        updatedAt: new Date().toISOString(),
+        title,
+        slug,
+        desc,
+        themePreset,
+        enableConfetti,
+        enableSound,
+        lockDuration,
+        backgroundUrl,
+        bgmEnabled,
+        bgmType,
+        bgmVolume,
+        spinSfxType,
+        winSfxType,
+        customBgmUrl,
+        customWinSfxUrl,
+        displaySlots,
+        slotDisplayType,
+        cardTemplate,
+        cardTextColor,
+        cardFontSize,
+        cardGreeting,
+        blessings
+      };
+      localStorage.setItem(`vqlc_draft_${wheelId}`, JSON.stringify(draftData));
+    }, 1000);
+
+    return () => clearTimeout(saveTimer);
+  }, [
+    loading,
+    wheelId,
+    wheel,
+    hasDraft,
+    title,
+    slug,
+    desc,
+    themePreset,
+    enableConfetti,
+    enableSound,
+    lockDuration,
+    backgroundUrl,
+    bgmEnabled,
+    bgmType,
+    bgmVolume,
+    spinSfxType,
+    winSfxType,
+    customBgmUrl,
+    customWinSfxUrl,
+    displaySlots,
+    slotDisplayType,
+    cardTemplate,
+    cardTextColor,
+    cardFontSize,
+    cardGreeting,
+    blessings
+  ]);
+
+  // Đồng bộ mảng blessings sang rawText
+  const syncBlessingsToRawText = React.useCallback((list: Blessing[]) => {
+    const textLines = list.map(item => {
+      const cat = item.category || 'Mục';
+      const q = item.quote || '';
+      return `${cat} | ${q} | ${item.text}`;
+    });
+    setRawText(textLines.join('\n'));
+  }, [setRawText]);
+
+  // Phân tích cú pháp rawText sang mảng blessings (hàm thuần túy)
+  const parseRawTextToBlessings = React.useCallback((text: string) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    return lines.map((line, index) => {
+      if (!line.includes('|')) {
+        const trimmed = line.trim();
+        let category = trimmed;
+        if (trimmed.length > 15) {
+          const words = trimmed.split(/\s+/).filter(Boolean);
+          category = words.slice(0, 3).join(' ');
+          if (category.length > 15) category = category.substring(0, 15) + '...';
+        }
+        return {
+          id: `temp-${index}`,
+          wheel_id: wheelId || '',
+          category,
+          quote: '',
+          text: trimmed,
+          is_custom: true
+        };
+      }
+
+      const parts = line.split('|');
+      if (parts.length >= 3) {
+        return {
+          id: `temp-${index}`,
+          wheel_id: wheelId || '',
+          category: parts[0].trim(),
+          quote: parts[1].trim(),
+          text: parts[2].trim(),
+          is_custom: true
+        };
+      } else if (parts.length === 2) {
+        return {
+          id: `temp-${index}`,
+          wheel_id: wheelId || '',
+          category: `Mục ${index + 1}`,
+          quote: parts[0].trim(),
+          text: parts[1].trim(),
+          is_custom: true
+        };
+      } else {
+        return {
+          id: `temp-${index}`,
+          wheel_id: wheelId || '',
+          category: `Mục ${index + 1}`,
+          quote: '',
+          text: parts[0].trim(),
+          is_custom: true
+        };
+      }
+    });
+  }, [wheelId]);
+
+  // Đồng bộ rawText sang mảng blessings (trả về mảng mới để dùng ngay)
+  const syncRawTextToBlessings = (text: string) => {
+    const parsed = parseRawTextToBlessings(text);
+    setBlessings(parsed);
+    return parsed;
+  };
+
+  // Chuyển tab và đồng bộ
+  const handleSwitchMode = (mode: 'list' | 'bulk') => {
+    if (editorMode === 'bulk' && mode === 'list') {
+      // Đồng bộ từ Textarea sang Grid
+      syncRawTextToBlessings(rawText);
+    } else if (editorMode === 'list' && mode === 'bulk') {
+      // Đồng bộ từ Grid sang Textarea
+      syncBlessingsToRawText(blessings);
+    }
+    setEditorMode(mode);
+  };
 
   const fetchWheelData = React.useCallback(async () => {
-    if (!wheelId) return;
+    if (!wheelId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const result = await dbService.getWheelById(wheelId);
       if (!result) {
         setError('Không tìm thấy vòng quay này.');
+        setLoading(false);
         return;
       }
-      
+
       // Verify admin owns this wheel
       if (result.parish.owner_id !== user?.id) {
         setError('Bạn không có quyền truy cập vòng quay này.');
+        setLoading(false);
         return;
       }
 
@@ -157,9 +544,15 @@ export const AdminWheelEditor: React.FC = () => {
       setDisplaySlots(result.wheel.display_slots ?? 12);
       setSlotDisplayType(result.wheel.slot_display_type ?? 'mixed');
 
+      // Tải cấu hình thiệp lộc mới
+      setCardTemplate(result.wheel.card_template || 'default');
+      setCardTextColor(result.wheel.card_text_color || '');
+      setCardFontSize(result.wheel.card_font_size || '16');
+      setCardGreeting(result.wheel.card_greeting || '');
+
       const items = await dbService.getBlessings(wheelId);
       setBlessings(items);
-      
+
       // format to textarea string: Category | Quote | Text
       const textLines = items.map(item => {
         const cat = item.category || 'Mục';
@@ -176,7 +569,7 @@ export const AdminWheelEditor: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [wheelId, user]);
+  }, [wheelId, user, setLoading]);
 
   useEffect(() => {
     if (!user) {
@@ -188,11 +581,6 @@ export const AdminWheelEditor: React.FC = () => {
     }, 0);
     return () => clearTimeout(timer);
   }, [user, navigate, fetchWheelData]);
-
-  const showToastMsg = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
 
   // Theme presets helper matching the public view
   const getThemeColors = (preset: string) => {
@@ -223,32 +611,104 @@ export const AdminWheelEditor: React.FC = () => {
 
   // Parse raw text segment labels in real time for canvas preview
   const previewSegments = React.useMemo(() => {
-    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    return lines.map((line, index) => {
-      if (!line.includes('|')) {
-        const trimmed = line.trim();
-        if (trimmed.length <= 15) {
-          return trimmed || `Mục ${index + 1}`;
-        }
-        const words = trimmed.split(/\s+/).filter(Boolean);
-        const threeWords = words.slice(0, 3).join(' ');
-        let category = threeWords;
-        if (category.length > 15) {
-          category = category.substring(0, 15);
-        }
-        return `${category}...`;
-      }
-
-      const parts = line.split('|');
-      if (parts.length >= 3) {
-        return parts[0].trim();
-      } else if (parts.length === 2) {
-        return `Mục ${index + 1}`;
-      } else {
-        return line.trim().substring(0, 15) || `Mục ${index + 1}`;
-      }
+    const listToUse = editorMode === 'bulk' ? parseRawTextToBlessings(rawText) : blessings;
+    return listToUse.map((item, index) => {
+      return item.category || `Mục ${index + 1}`;
     });
-  }, [rawText]);
+  }, [rawText, blessings, editorMode, parseRawTextToBlessings]);
+
+  // Lọc câu lộc trong Grid
+  const filteredBlessings = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return blessings;
+    return blessings.filter(
+      b =>
+        (b.category || '').toLowerCase().includes(query) ||
+        (b.quote || '').toLowerCase().includes(query) ||
+        (b.text || '').toLowerCase().includes(query)
+    );
+  }, [blessings, searchQuery]);
+
+  // Phân trang
+  const totalPages = Math.ceil(filteredBlessings.length / pageSize) || 1;
+  const paginatedBlessings = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredBlessings.slice(start, start + pageSize);
+  }, [filteredBlessings, currentPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      Promise.resolve().then(() => setCurrentPage(totalPages));
+    }
+  }, [totalPages, currentPage]);
+
+  // Thêm câu lộc mới từ giao diện trực quan
+  const handleAddBlessing = React.useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newText.trim()) {
+      alert('Nội dung câu lộc không được để trống.');
+      return;
+    }
+    const newBlessing: Blessing = {
+      id: `temp-add-${Date.now()}`,
+      wheel_id: wheelId || '',
+      category: newCategory.trim() || 'Lời Chúa',
+      quote: newQuote.trim(),
+      text: newText.trim(),
+      is_custom: true
+    };
+    const updatedList = [...blessings, newBlessing];
+    setBlessings(updatedList);
+    syncBlessingsToRawText(updatedList);
+
+    setNewCategory('');
+    setNewQuote('');
+    setNewText('');
+    showToastMsg('Đã thêm câu lộc vào danh sách.');
+
+    // Chuyển đến trang cuối
+    const newTotalPages = Math.ceil(updatedList.length / pageSize);
+    setCurrentPage(newTotalPages);
+  }, [newText, newCategory, newQuote, wheelId, blessings, syncBlessingsToRawText, showToastMsg, pageSize, setCurrentPage]);
+
+  // Kích hoạt sửa inline
+  const startEditInline = (item: Blessing) => {
+    setEditingId(item.id);
+    setEditCategory(item.category || '');
+    setEditQuote(item.quote || '');
+    setEditText(item.text || '');
+  };
+
+  // Lưu sửa inline
+  const saveEditInline = (id: string) => {
+    if (!editText.trim()) {
+      alert('Nội dung câu lộc không được để trống.');
+      return;
+    }
+    const updatedList = blessings.map(b => {
+      if (b.id === id) {
+        return {
+          ...b,
+          category: editCategory.trim() || 'Lời Chúa',
+          quote: editQuote.trim(),
+          text: editText.trim()
+        };
+      }
+      return b;
+    });
+    setBlessings(updatedList);
+    syncBlessingsToRawText(updatedList);
+    setEditingId(null);
+    showToastMsg('Đã cập nhật câu lộc.');
+  };
+
+  // Xóa câu lộc trong Grid
+  const handleDeleteBlessing = (id: string) => {
+    const updatedList = blessings.filter(b => b.id !== id);
+    setBlessings(updatedList);
+    syncBlessingsToRawText(updatedList);
+    showToastMsg('Đã xóa câu lộc khỏi danh sách.');
+  };
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
 
@@ -266,8 +726,8 @@ export const AdminWheelEditor: React.FC = () => {
 
     ctx.clearRect(0, 0, width, height);
 
-    const displayLen = displaySlots && displaySlots > 0 
-      ? displaySlots 
+    const displayLen = displaySlots && displaySlots > 0
+      ? displaySlots
       : (previewSegments.length || 12);
 
     const arcSize = (2 * Math.PI) / displayLen;
@@ -276,13 +736,14 @@ export const AdminWheelEditor: React.FC = () => {
     // Save state
     ctx.save();
     ctx.translate(centerX, centerY);
+    ctx.rotate(rotationAngle); // Góc xoay động phục vụ quay thử
 
     // Draw slices
     for (let i = 0; i < displayLen; i++) {
       const angle = i * arcSize;
       ctx.beginPath();
       ctx.fillStyle = colors[i % colors.length];
-      
+
       // Draw slice arc
       ctx.moveTo(0, 0);
       ctx.arc(0, 0, radius, angle, angle + arcSize);
@@ -300,10 +761,10 @@ export const AdminWheelEditor: React.FC = () => {
       ctx.rotate(angle + arcSize / 2);
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
-      
+
       let text: string;
       let fontSize: string;
-      
+
       if (slotDisplayType === 'text') {
         if (previewSegments.length > 0) {
           text = previewSegments[i % previewSegments.length];
@@ -327,7 +788,7 @@ export const AdminWheelEditor: React.FC = () => {
           fontSize = '14px';
         }
       }
-      
+
       ctx.font = `bold ${fontSize} 'Be Vietnam Pro', sans-serif`;
       const displayLabel = text.length > 18 ? text.substring(0, 16) + '..' : text;
       ctx.fillText(displayLabel, radius - 12, 0);
@@ -350,7 +811,7 @@ export const AdminWheelEditor: React.FC = () => {
     ctx.arc(centerX, centerY, 18, 0, 2 * Math.PI);
     ctx.fillStyle = colors[0]; // Primary theme color
     ctx.fill();
-  }, [previewSegments, themePreset, displaySlots, slotDisplayType]);
+  }, [previewSegments, themePreset, displaySlots, slotDisplayType, rotationAngle]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -429,7 +890,7 @@ export const AdminWheelEditor: React.FC = () => {
       audio.volume = bgmVolume;
       audio.loop = true;
       audio.onended = () => setIsBgmPreviewPlaying(false);
-      
+
       previewAudioRef.current = audio;
       audio.play()
         .then(() => setIsBgmPreviewPlaying(true))
@@ -466,7 +927,7 @@ export const AdminWheelEditor: React.FC = () => {
   const handleRemoveCustomBgm = async () => {
     if (!wheelId) return;
     if (!window.confirm('Bạn có chắc chắn muốn xóa nhạc nền tự chọn của giáo xứ?')) return;
-    
+
     setCustomBgmLoading(true);
     try {
       await dbService.deleteCustomBgm(wheelId, customBgmUrl);
@@ -507,7 +968,7 @@ export const AdminWheelEditor: React.FC = () => {
   const handleRemoveCustomWinSfx = async () => {
     if (!wheelId) return;
     if (!window.confirm('Bạn có chắc chắn muốn xóa âm thanh trúng lộc tự chọn của giáo xứ?')) return;
-    
+
     setCustomWinSfxLoading(true);
     try {
       await dbService.deleteCustomWinSfx(wheelId, customWinSfxUrl);
@@ -582,24 +1043,213 @@ export const AdminWheelEditor: React.FC = () => {
     }
   };
 
-  // Nạp Preset
-  const handleLoadPreset = async (
+  const handleLoadPresetSmart = (
     presetType: 'gifts' | 'tet' | 'christmas' | 'easter' | 'lent' | 'advent' | 'marian' | 'joseph' | 'eucharist'
   ) => {
     if (!wheelId) return;
-    if (!window.confirm('Hành động này sẽ XÓA TOÀN BỘ danh sách lộc cũ của vòng quay này để nạp mẫu. Bạn có chắc chắn?')) return;
-    
-    setSaveLoading(true);
-    try {
-      await dbService.loadDefaultBlessingsPreset(wheelId, presetType);
-      showToastMsg('Nạp bộ mẫu thành công!');
-      fetchWheelData();
-    } catch (err) {
-      console.error(err);
-      showToastMsg('Nạp bộ mẫu thất bại.');
-    } finally {
-      setSaveLoading(false);
+
+    let presetList: { category: string; quote: string; text: string; is_custom: boolean }[];
+
+    if (presetType === 'gifts') {
+      presetList = PENTECOST_BLESSINGS.map(b => ({
+        category: `Ơn Thánh Thần`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
+    } else if (presetType === 'christmas') {
+      presetList = CHRISTMAS_BLESSINGS.map(b => ({
+        category: `Lộc Giáng Sinh`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
+    } else if (presetType === 'easter') {
+      presetList = EASTER_BLESSINGS.map(b => ({
+        category: `Lộc Phục Sinh`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
+    } else if (presetType === 'lent') {
+      presetList = LENT_BLESSINGS.map(b => ({
+        category: `Lộc Mùa Chay`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
+    } else if (presetType === 'advent') {
+      presetList = ADVENT_BLESSINGS.map(b => ({
+        category: `Lộc Mùa Vọng`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
+    } else if (presetType === 'marian') {
+      presetList = MARIAN_BLESSINGS.map(b => ({
+        category: `Lộc Đức Mẹ`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
+    } else if (presetType === 'joseph') {
+      presetList = ST_JOSEPH_BLESSINGS.map(b => ({
+        category: `Lộc Thánh Giuse`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
+    } else if (presetType === 'eucharist') {
+      presetList = EUCHARIST_BLESSINGS.map(b => ({
+        category: `Lộc Thánh Thể`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
+    } else {
+      presetList = DEFAULT_BLESSINGS.filter(b => b.id !== 0).map(b => ({
+        category: `Lộc Lời Chúa`,
+        quote: b.quote,
+        text: b.text,
+        is_custom: true
+      }));
     }
+
+    const append = window.confirm(
+      `Hệ thống phát hiện preset này chứa ${presetList.length} câu lộc.\n\n- Click OK để THÊM NỐI TIẾP (Giữ lộc hiện tại, chèn thêm preset vào cuối).\n- Click CANCEL để chọn phương án ghi đè.`
+    );
+
+    let newList: Blessing[];
+
+    const mappedTheme = presetType === 'gifts' ? 'pentecost' : presetType;
+    const mappedCard = presetType === 'tet' ? 'tet' : presetType === 'christmas' ? 'christmas' : presetType === 'joseph' ? 'wood' : presetType === 'eucharist' ? 'gold' : 'default';
+
+    if (append) {
+      // Append
+      const formattedPreset: Blessing[] = presetList.map((b, idx) => ({
+        id: `preset-${idx}-${Date.now()}`,
+        wheel_id: wheelId,
+        category: b.category,
+        quote: b.quote || '',
+        text: b.text,
+        is_custom: true
+      }));
+      newList = [...blessings, ...formattedPreset];
+      setBlessings(newList);
+      syncBlessingsToRawText(newList);
+
+      // Cập nhật theme và card template nếu theme hiện tại đang ở mặc định 'gold'
+      if (themePreset === 'gold') {
+        setThemePreset(mappedTheme);
+        setCardTemplate(mappedCard);
+      }
+      showToastMsg(`Đã thêm nối tiếp ${presetList.length} lộc vào danh sách nháp.`);
+    } else {
+      const overwrite = window.confirm(
+        `Bạn có chắc chắn muốn GHI ĐÈ?\n(Hành động này sẽ XÓA SẠCH lộc hiện tại trong editor và nạp ${presetList.length} lộc mới của preset này. Bạn cần bấm "Lưu cấu hình" để chính thức áp dụng)`
+      );
+      if (overwrite) {
+        const formattedPreset: Blessing[] = presetList.map((b, idx) => ({
+          id: `preset-${idx}-${Date.now()}`,
+          wheel_id: wheelId,
+          category: b.category,
+          quote: b.quote || '',
+          text: b.text,
+          is_custom: true
+        }));
+        newList = formattedPreset;
+        setBlessings(newList);
+        syncBlessingsToRawText(newList);
+
+        // Cập nhật theme và card template tương ứng
+        setThemePreset(mappedTheme);
+        setCardTemplate(mappedCard);
+
+        showToastMsg(`Đã nạp đè preset với ${presetList.length} lộc mới vào danh sách nháp.`);
+      }
+    }
+  };
+
+  // Quay thử (Test Spin)
+  const handleTestSpin = () => {
+    if (isTestSpinning || blessings.length === 0) return;
+    setIsTestSpinning(true);
+    setTestWinner(null);
+    setShowTestWinnerModal(false);
+
+    // Kích hoạt âm thanh
+    let audioCtx: AudioContext | null = null;
+    if (enableSound) {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass) {
+        audioCtx = new AudioContextClass();
+      }
+    }
+
+    const randomIndex = Math.floor(Math.random() * blessings.length);
+    const winner = blessings[randomIndex];
+
+    const displayLen = displaySlots && displaySlots > 0 ? displaySlots : blessings.length;
+    const winnerIndexInDisplay = randomIndex % displayLen;
+    const anglePerSegment = (2 * Math.PI) / displayLen;
+
+    // pointer nằm ở bên phải (góc 0 radian)
+    const targetAngle = 2 * Math.PI - (winnerIndexInDisplay + 0.5) * anglePerSegment;
+    const finalAngle = targetAngle + Math.PI * 2 * 6; // Xoay 6 vòng
+
+    const startTime = performance.now();
+    const duration = 5000; // 5 giây
+    const startAngle = testSpinAngleRef.current;
+
+    let lastSegment = -1;
+    let spinClickCount = 0;
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      const easeOutCubic = (x: number): number => {
+        return 1 - Math.pow(1 - x, 3);
+      };
+
+      const t = easeOutCubic(progress);
+      const currentAngle = startAngle + (finalAngle - startAngle) * t;
+
+      testSpinAngleRef.current = currentAngle;
+      setRotationAngle(currentAngle);
+
+      if (enableSound && audioCtx) {
+        const currSegment = Math.floor(currentAngle / anglePerSegment);
+        if (currSegment !== lastSegment) {
+          spinClickCount++;
+          playSynthesizedSpinSFX(audioCtx, spinSfxType, spinClickCount);
+          lastSegment = currSegment;
+        }
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        setIsTestSpinning(false);
+        setTestWinner(winner);
+        setShowTestWinnerModal(true);
+
+        if (enableSound && audioCtx) {
+          if (winSfxType === 'custom' && customWinSfxUrl) {
+            dbService.getLocalWinSfx(wheelId!).then(blob => {
+              if (blob) {
+                const url = URL.createObjectURL(blob);
+                new Audio(url).play().catch(e => console.warn(e));
+              }
+            });
+          } else {
+            playSynthesizedWinSFX(audioCtx, winSfxType);
+          }
+        }
+      }
+    };
+
+    requestAnimationFrame(animate);
   };
 
   const handleSaveConfig = async (e: React.FormEvent) => {
@@ -608,13 +1258,23 @@ export const AdminWheelEditor: React.FC = () => {
     setSaveLoading(true);
     setSlugError(null);
 
+    // Đồng bộ ngược từ rawText nếu đang mở tab Bulk khi lưu
+    let finalBlessings = blessings;
+    if (editorMode === 'bulk') {
+      finalBlessings = syncRawTextToBlessings(rawText);
+    }
+
     try {
       const isUnique = await dbService.checkWheelSlugUnique(parish.id, slug, wheelId);
       if (!isUnique) {
         throw new Error('Đường dẫn vòng quay đã tồn tại trong giáo xứ.');
       }
 
-      // 1. Update wheel fields
+      if (finalBlessings.length < 2) {
+        throw new Error('Vui lòng nhập ít nhất 2 câu Lộc/Lời chúc.');
+      }
+
+      // 1. Lưu cấu hình bánh xe bao gồm cả trường cấu hình thiệp lộc
       await dbService.updateWheel(wheelId, {
         title,
         slug,
@@ -632,67 +1292,82 @@ export const AdminWheelEditor: React.FC = () => {
         custom_bgm_url: customBgmUrl,
         custom_win_sfx_url: customWinSfxUrl,
         display_slots: displaySlots,
-        slot_display_type: slotDisplayType
+        slot_display_type: slotDisplayType,
+        card_template: cardTemplate,
+        card_text_color: cardTextColor,
+        card_font_size: cardFontSize,
+        card_greeting: cardGreeting
       });
 
-      // 2. Parse rawText to blessings list
-      const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      const parsedBlessingsList: Omit<Blessing, 'id' | 'wheel_id'>[] = lines.map((line, index) => {
-        if (!line.includes('|')) {
-          const trimmed = line.trim();
-          if (trimmed.length <= 15) {
-            return {
-              category: trimmed,
-              quote: '',
-              text: trimmed,
-              is_custom: true
-            };
-          }
-          const words = trimmed.split(/\s+/).filter(Boolean);
-          const threeWords = words.slice(0, 3).join(' ');
-          let category = threeWords;
-          if (category.length > 15) {
-            category = category.substring(0, 15);
-          }
-          return {
-            category: `${category}...`,
-            quote: '',
-            text: trimmed,
-            is_custom: true
-          };
+      // 2. Format và lưu blessings
+      const parsedBlessingsList = finalBlessings.map(b => ({
+        category: b.category || 'Mục',
+        quote: b.quote || '',
+        text: b.text,
+        is_custom: true
+      }));
+
+      await dbService.saveBlessings(wheelId, parsedBlessingsList);
+
+      // Build and upload consolidated JSON config
+      if (supabase) {
+        const consolidatedConfig = {
+          parish,
+          wheel: {
+            ...wheel,
+            title,
+            slug,
+            description: desc,
+            theme_preset: themePreset,
+            enable_confetti: enableConfetti,
+            enable_sound: enableSound,
+            lock_duration: lockDuration,
+            background_url: backgroundUrl.trim(),
+            bgm_enabled: bgmEnabled,
+            bgm_type: bgmType,
+            bgm_volume: bgmVolume,
+            spin_sfx_type: spinSfxType,
+            win_sfx_type: winSfxType,
+            custom_bgm_url: customBgmUrl,
+            custom_win_sfx_url: customWinSfxUrl,
+            display_slots: displaySlots,
+            slot_display_type: slotDisplayType,
+            card_template: cardTemplate,
+            card_text_color: cardTextColor,
+            card_font_size: cardFontSize,
+            card_greeting: cardGreeting
+          },
+          blessings: parsedBlessingsList
+        };
+
+        const jsonStr = JSON.stringify(consolidatedConfig, null, 2);
+        const fileBlob = new Blob([jsonStr], { type: 'application/json' });
+        const filePath = `${parish.slug}/${slug}.json`;
+
+        // If the slug changed, delete the old configuration file
+        if (wheel.slug !== slug) {
+          const oldFilePath = `${parish.slug}/${wheel.slug}.json`;
+          await supabase.storage
+            .from('configs')
+            .remove([oldFilePath])
+            .catch((err: unknown) => console.warn('Failed to delete old config JSON:', err));
         }
 
-        const parts = line.split('|');
-        if (parts.length >= 3) {
-          return {
-            category: parts[0].trim(),
-            quote: parts[1].trim(),
-            text: parts[2].trim(),
-            is_custom: true
-          };
-        } else if (parts.length === 2) {
-          return {
-            category: `Mục ${index + 1}`,
-            quote: parts[0].trim(),
-            text: parts[1].trim(),
-            is_custom: true
-          };
-        } else {
-          return {
-            category: `Mục ${index + 1}`,
-            quote: '',
-            text: parts[0].trim(),
-            is_custom: true
-          };
-        }
-      });
+        const { error: uploadError } = await supabase.storage
+          .from('configs')
+          .upload(filePath, fileBlob, {
+            contentType: 'application/json',
+            upsert: true
+          });
 
-      if (parsedBlessingsList.length < 2) {
-        throw new Error('Vui lòng nhập ít nhất 2 câu Lộc/Lời chúc.');
+        if (uploadError) {
+          console.error('Failed to upload consolidated config JSON to Supabase storage:', uploadError);
+        }
       }
 
-      // 3. Save blessings to DB
-      await dbService.saveBlessings(wheelId, parsedBlessingsList);
+      // Remove draft from local storage after successful database save
+      localStorage.removeItem(`vqlc_draft_${wheelId}`);
+      setHasDraft(false);
 
       showToastMsg('Lưu cấu hình thành công!');
       fetchWheelData();
@@ -718,6 +1393,53 @@ export const AdminWheelEditor: React.FC = () => {
     }
   };
 
+  // Helper lấy cấu hình Style nền thiệp Preview
+  const getCardBgStyle = (template: string, borderColors: string) => {
+    switch (template) {
+      case 'gold':
+        return {
+          background: 'radial-gradient(circle at center, #FFFDF0 0%, #F9F3D3 100%)',
+          border: '3px solid #D8B43F',
+          boxShadow: '0 10px 30px rgba(216, 180, 63, 0.15)'
+        };
+      case 'tet':
+        return {
+          background: 'radial-gradient(circle at center, #FFF5F5 0%, #FFE3E3 100%)',
+          border: '3px solid #D32F2F',
+          boxShadow: '0 10px 30px rgba(211, 47, 47, 0.15)'
+        };
+      case 'christmas':
+        return {
+          background: 'radial-gradient(circle at center, #F0FDF4 0%, #DCFCE7 100%)',
+          border: '3px double #0F5E3D',
+          boxShadow: '0 10px 30px rgba(15, 94, 61, 0.15)'
+        };
+      case 'wood':
+        return {
+          background: 'radial-gradient(circle at center, #FAF6F0 0%, #EFE5D3 100%)',
+          border: '3px solid #8D6E63',
+          boxShadow: '0 10px 30px rgba(141, 110, 99, 0.15)'
+        };
+      case 'default':
+      default:
+        return {
+          background: 'radial-gradient(circle at center, rgba(255, 253, 246, 0.8) 0%, rgba(255, 245, 219, 0.7) 100%)',
+          border: `2px solid ${borderColors}`,
+          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.08)'
+        };
+    }
+  };
+
+  // Lấy câu lộc đầu tiên làm mẫu xem trước thiệp
+  const previewBlessingSample = useMemo(() => {
+    if (blessings.length > 0) return blessings[0];
+    return {
+      category: 'Ơn Khôn Ngoan',
+      quote: 'Is 11,2',
+      text: 'Thần khí Khôn Ngoan giúp anh/chị luôn biết chọn lựa điều lành theo ý muốn của Thiên Chúa trong mọi hoàn cảnh cuộc sống.'
+    };
+  }, [blessings]);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: '#FAF6EE', gap: '8px' }}>
@@ -738,6 +1460,14 @@ export const AdminWheelEditor: React.FC = () => {
       </div>
     );
   }
+
+  const presetColors = getThemeColors(themePreset);
+  const borderGold = themePreset === 'christmas' ? '#F59E0B' : presetColors[1] || '#D8B43F';
+  const primaryDark = getDarkContrastColor(presetColors[0], themePreset);
+  const cardBorderColor = getDarkContrastColor(borderGold, themePreset);
+
+  const previewCardTextColor = cardTextColor || primaryDark;
+  const previewCardFontSize = cardFontSize ? `${cardFontSize}px` : '17px';
 
   return (
     <div style={{ background: '#FAF6EE', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -763,10 +1493,52 @@ export const AdminWheelEditor: React.FC = () => {
 
       {/* Workspace Area */}
       <main className="container" style={{ padding: '24px 16px', flex: 1 }}>
+        {hasDraft && (
+          <div style={{
+            background: 'rgba(216, 180, 63, 0.08)',
+            border: '1px solid rgba(216, 180, 63, 0.3)',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            boxShadow: '0 4px 12px rgba(216, 180, 63, 0.08)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: 'rgba(216, 180, 63, 0.15)', borderRadius: '50%', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FileText size={20} style={{ color: 'var(--color-gold)' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <strong style={{ fontSize: '14px', color: 'var(--color-primary)' }}>Phát hiện bản nháp chưa lưu!</strong>
+                <span style={{ fontSize: '12.5px', color: 'var(--color-text-muted)' }}>
+                  Hệ thống tìm thấy một bản nháp tự động lưu trên trình duyệt này lúc <strong>{draftTime}</strong>.
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={handleRecoverDraft} 
+                className="btn btn-primary btn-gold" 
+                style={{ fontSize: '13px', padding: '8px 16px', gap: '6px', cursor: 'pointer' }}
+              >
+                <RotateCcw size={14} /> Khôi phục bản nháp
+              </button>
+              <button 
+                onClick={handleDiscardDraft} 
+                className="btn btn-secondary" 
+                style={{ fontSize: '13px', padding: '8px 16px', color: 'var(--color-error)', cursor: 'pointer' }}
+              >
+                Xóa bản nháp
+              </button>
+            </div>
+          </div>
+        )}
         <div className="builder-grid">
           {/* Left panel - Config and Textarea */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            
+
             {/* Core Settings Card */}
             <div className="card" style={{ border: '1px solid rgba(216, 180, 63, 0.25)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.04)' }}>
               <h3 className="text-serif" style={{ fontSize: '16px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(15, 61, 46, 0.08)', paddingBottom: '10px', marginBottom: '16px', fontWeight: '800' }}>
@@ -843,7 +1615,7 @@ export const AdminWheelEditor: React.FC = () => {
                     <option value="forever">Khóa vĩnh viễn trên thiết bị này</option>
                   </select>
                 </div>
- 
+
                 <div className="form-group">
                   <label htmlFor="display-slots" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>Số khung hiển thị</label>
                   <select
@@ -881,7 +1653,7 @@ export const AdminWheelEditor: React.FC = () => {
 
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                   <label style={{ color: 'var(--color-primary)', fontWeight: '600' }}>Hình ảnh Nền Vòng Quay (Ghi đè hình nền Giáo xứ)</label>
-                  
+
                   {backgroundUrl ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'rgba(15, 61, 46, 0.03)', padding: '12px', borderRadius: '10px', border: '1.5px solid rgba(15, 61, 46, 0.1)' }}>
                       <div style={{ width: '80px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)', backgroundColor: '#E5E7EB' }}>
@@ -1227,13 +1999,13 @@ export const AdminWheelEditor: React.FC = () => {
                                 textAlign: 'center'
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.borderColor = '#D8B43F';
-                                e.currentTarget.style.backgroundColor = 'rgba(216, 180, 63, 0.08)';
-                              }}
+                                  e.currentTarget.style.borderColor = '#D8B43F';
+                                  e.currentTarget.style.backgroundColor = 'rgba(216, 180, 63, 0.08)';
+                                }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.borderColor = 'rgba(216, 180, 63, 0.4)';
-                                e.currentTarget.style.backgroundColor = 'rgba(216, 180, 63, 0.02)';
-                              }}
+                                  e.currentTarget.style.borderColor = 'rgba(216, 180, 63, 0.4)';
+                                  e.currentTarget.style.backgroundColor = 'rgba(216, 180, 63, 0.02)';
+                                }}
                             >
                               {customWinSfxLoading ? <Loader className="animate-spin" size={14} /> : <Music size={14} style={{ color: '#D8B43F' }} />}
                               <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: '600' }}>
@@ -1246,17 +2018,37 @@ export const AdminWheelEditor: React.FC = () => {
                     )}
                   </div>
                 </div>
-
               </div>
             </div>
 
             {/* Blessings Editor Card */}
             <div className="card" style={{ border: '1px solid rgba(216, 180, 63, 0.25)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.04)' }}>
-              <div style={{ borderBottom: '1px solid rgba(15, 61, 46, 0.08)', paddingBottom: '10px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(15, 61, 46, 0.08)', paddingBottom: '10px', marginBottom: '16px' }}>
                 <h3 className="text-serif" style={{ fontSize: '16px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800' }}>
                   <Sparkles size={16} />
                   <span>Danh sách Lộc Lời Chúa / Lời chúc ({blessings.length} mục)</span>
                 </h3>
+                {/* Switch editor mode tabs */}
+                <div style={{ display: 'flex', background: 'rgba(15, 61, 46, 0.05)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(15, 61, 46, 0.08)' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchMode('list')}
+                    className={`btn ${editorMode === 'list' ? 'btn-gold' : ''}`}
+                    style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '6px', border: 'none', background: editorMode === 'list' ? 'var(--color-gold)' : 'transparent', color: editorMode === 'list' ? '#FFFFFF' : 'var(--color-primary)', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    <BookOpen size={13} style={{ marginRight: '4px', display: 'inline' }} />
+                    Quản lý trực quan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchMode('bulk')}
+                    className={`btn ${editorMode === 'bulk' ? 'btn-gold' : ''}`}
+                    style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '6px', border: 'none', background: editorMode === 'bulk' ? 'var(--color-gold)' : 'transparent', color: editorMode === 'bulk' ? '#FFFFFF' : 'var(--color-primary)', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    <FileText size={13} style={{ marginRight: '4px', display: 'inline' }} />
+                    Dán nhanh (Bulk)
+                  </button>
+                </div>
               </div>
 
               {/* Preset Loader Section */}
@@ -1268,14 +2060,14 @@ export const AdminWheelEditor: React.FC = () => {
                 marginBottom: '16px'
               }}>
                 <span style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--color-primary)', display: 'block', marginBottom: '10px' }}>
-                  Nạp nhanh danh sách mẫu phụng vụ:
+                  Nạp nhanh danh sách mẫu phụng vụ (Preset thông minh):
                 </span>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
                   {PRESET_OPTIONS.map((opt) => (
                     <button
                       key={opt.type}
                       type="button"
-                      onClick={() => handleLoadPreset(opt.type)}
+                      onClick={() => handleLoadPresetSmart(opt.type)}
                       className="btn"
                       style={{
                         display: 'flex',
@@ -1311,48 +2103,275 @@ export const AdminWheelEditor: React.FC = () => {
                 </div>
               </div>
 
-              {/* Visual Helper Banner */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '12px',
-                backgroundColor: 'rgba(216, 180, 63, 0.08)',
-                border: '1.5px solid rgba(216, 180, 63, 0.35)',
-                borderRadius: '10px',
-                padding: '12px 16px',
-                marginBottom: '16px'
-              }}>
-                <Sparkles size={18} style={{ color: '#D8B43F', flexShrink: 0, marginTop: '2px' }} />
-                <div style={{ fontSize: '13px', color: 'var(--color-primary)', lineHeight: '1.5' }}>
-                  <strong style={{ display: 'block', color: 'var(--color-primary)', marginBottom: '2px', fontWeight: '700' }}>
-                    Hệ thống tự động nhận diện danh sách
-                  </strong>
-                  Bạn chỉ cần dán mỗi dòng 1 câu chúc/Kinh Thánh (ví dụ: sao chép trực tiếp từ một cột trong Excel/Word), hệ thống sẽ tự động phân tích và sinh ra lát cắt cho vòng quay mà không bắt buộc phải sử dụng ký tự ngăn cách <code style={{ backgroundColor: 'rgba(15, 61, 46, 0.08)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: '700' }}>|</code>!
-                </div>
-              </div>
+              {/* Mode list (Quản lý trực quan) */}
+              {editorMode === 'list' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Tìm kiếm & Thống kê */}
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+                      <input
+                        type="text"
+                        placeholder="Tìm kiếm câu lộc (phân loại, nội dung, trích dẫn)..."
+                        className="form-control"
+                        value={searchQuery}
+                        onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                        style={{ paddingLeft: '36px', height: '38px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                      />
+                    </div>
+                  </div>
 
-              <div className="form-group">
-                <label htmlFor="raw-text" style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: 'var(--color-primary)', fontWeight: '600', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '14px' }}>Nhập hoặc Dán danh sách Lộc Lời Chúa</span>
-                  <span style={{ fontWeight: '400', fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
-                    Dán danh sách câu chúc của bạn tại đây (mỗi dòng tương ứng với 1 lát cắt trên vòng quay).
-                  </span>
-                </label>
-                <textarea
-                  id="raw-text"
-                  className="form-control editor-textarea"
-                  value={rawText}
-                  onChange={(e) => setRawText(e.target.value)}
-                  placeholder={`CÁCH 1: Dán trực tiếp danh sách (Mỗi dòng một câu):\nChúa là mục tử chăn dắt tôi, tôi chẳng thiếu thốn gì.\nKính sợ Chúa là đầu mối sự khôn ngoan.\n\nCÁCH 2: Định dạng nâng cao (Phân cách bằng dấu '|')\nTên Lát Cắt | Trích Dẫn Kinh Thánh | Nội dung câu Lộc\nƠn khôn ngoan | Is 11,2 | Thần khí Khôn Ngoan giúp anh/chị luôn biết chọn lựa điều lành.`}
-                  style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '10px', minHeight: '220px', fontSize: '13px', lineHeight: '1.6' }}
-                />
-              </div>
+                  {/* Bảng danh sách câu lộc */}
+                  <div className="data-table-wrapper" style={{ border: '1px solid rgba(15, 61, 46, 0.08)', borderRadius: '8px', overflow: 'hidden' }}>
+                    <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'rgba(15, 61, 46, 0.04)' }}>
+                          <th style={{ width: '60px', padding: '12px 16px' }}>STT</th>
+                          <th style={{ width: '150px', padding: '12px 16px' }}>Lát cắt (Category)</th>
+                          <th style={{ width: '120px', padding: '12px 16px' }}>Trích dẫn</th>
+                          <th style={{ padding: '12px 16px' }}>Nội dung câu lộc</th>
+                          <th style={{ width: '100px', padding: '12px 16px', textAlign: 'center' }}>Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedBlessings.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                              Không tìm thấy câu lộc nào phù hợp.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedBlessings.map((item, index) => {
+                            const globalIndex = (currentPage - 1) * pageSize + index + 1;
+                            const isEditing = editingId === item.id;
+
+                            if (isEditing) {
+                              return (
+                                <tr key={item.id} style={{ backgroundColor: 'rgba(216, 180, 63, 0.08)' }}>
+                                  <td style={{ padding: '12px 16px', fontWeight: 'bold' }}>{globalIndex}</td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <input
+                                      type="text"
+                                      className="form-control"
+                                      value={editCategory}
+                                      onChange={(e) => setEditCategory(e.target.value)}
+                                      style={{ height: '32px', padding: '4px 8px', fontSize: '12px' }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <input
+                                      type="text"
+                                      className="form-control"
+                                      value={editQuote}
+                                      onChange={(e) => setEditQuote(e.target.value)}
+                                      placeholder="Ga 3,16"
+                                      style={{ height: '32px', padding: '4px 8px', fontSize: '12px' }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <textarea
+                                      className="form-control"
+                                      value={editText}
+                                      onChange={(e) => setEditText(e.target.value)}
+                                      rows={2}
+                                      style={{ fontSize: '12.5px', padding: '6px 8px', minHeight: '45px', resize: 'vertical' }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => saveEditInline(item.id)}
+                                        className="btn btn-success"
+                                        style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: 'var(--color-primary)', color: '#FFFFFF', border: 'none', cursor: 'pointer' }}
+                                        title="Lưu"
+                                      >
+                                        <Check size={14} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingId(null)}
+                                        className="btn btn-danger"
+                                        style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: '#E5E7EB', color: '#374151', border: 'none', cursor: 'pointer' }}
+                                        title="Hủy"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            return (
+                              <tr key={item.id} style={{ borderBottom: '1px solid rgba(15, 61, 46, 0.05)' }}>
+                                <td style={{ padding: '12px 16px', fontWeight: '600', color: 'var(--color-primary)' }}>{globalIndex}</td>
+                                <td style={{ padding: '12px 16px', fontWeight: 'bold' }}>{item.category}</td>
+                                <td style={{ padding: '12px 16px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>{item.quote || '—'}</td>
+                                <td style={{ padding: '12px 16px', fontSize: '13px', lineHeight: '1.5' }}>{item.text}</td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditInline(item)}
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
+                                      title="Chỉnh sửa câu lộc này"
+                                    >
+                                      <Edit size={12} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteBlessing(item.id)}
+                                      className="btn btn-danger"
+                                      style={{ padding: '4px 8px', borderRadius: '6px', border: 'none', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', cursor: 'pointer' }}
+                                      title="Xóa câu lộc này"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Phân trang */}
+                  {totalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                        Hiển thị {paginatedBlessings.length} trên tổng số {filteredBlessings.length} câu lộc
+                      </span>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                          disabled={currentPage === 1}
+                          className="btn"
+                          style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, border: '1px solid rgba(15, 61, 46, 0.15)', background: '#FFFFFF', borderRadius: '6px' }}
+                        >
+                          <ChevronLeft size={14} />
+                          <span>Trước</span>
+                        </button>
+                        <span style={{ fontSize: '13.5px', fontWeight: 'bold' }}>Trang {currentPage} / {totalPages}</span>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                          disabled={currentPage === totalPages}
+                          className="btn"
+                          style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, border: '1px solid rgba(15, 61, 46, 0.15)', background: '#FFFFFF', borderRadius: '6px' }}
+                        >
+                          <span>Sau</span>
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Form thêm nhanh câu lộc */}
+                  <form onSubmit={handleAddBlessing} style={{ padding: '16px', backgroundColor: 'rgba(15, 61, 46, 0.02)', borderRadius: '8px', border: '1px solid rgba(15, 61, 46, 0.06)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--color-primary)' }}>
+                      <Plus size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />
+                      Thêm câu lộc / Lời chúc mới vào danh sách
+                    </span>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '11px', fontWeight: '600' }}>Tên lát cắt trên vòng quay</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="ví dụ: Ơn Khôn Ngoan"
+                          value={newCategory}
+                          onChange={(e) => setNewCategory(e.target.value)}
+                          style={{ height: '36px', fontSize: '13px' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '11px', fontWeight: '600' }}>Trích dẫn kinh thánh / Số quà</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="ví dụ: Is 11,2"
+                          value={newQuote}
+                          onChange={(e) => setNewQuote(e.target.value)}
+                          style={{ height: '36px', fontSize: '13px' }}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label style={{ fontSize: '11px', fontWeight: '600' }}>Nội dung câu lộc hiển thị trên thiệp</label>
+                      <textarea
+                        className="form-control"
+                        placeholder="ví dụ: Thần khí Khôn Ngoan giúp anh/chị nhìn nhận mọi sự..."
+                        value={newText}
+                        onChange={(e) => setNewText(e.target.value)}
+                        rows={2}
+                        required
+                        style={{ fontSize: '13px', padding: '8px', resize: 'vertical' }}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-gold"
+                      style={{ alignSelf: 'flex-end', height: '36px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Plus size={14} />
+                      <span>Thêm vào danh sách</span>
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Mode Bulk (Dán nhanh qua Textarea) */}
+              {editorMode === 'bulk' && (
+                <div>
+                  {/* Visual Helper Banner */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    backgroundColor: 'rgba(216, 180, 63, 0.08)',
+                    border: '1.5px solid rgba(216, 180, 63, 0.35)',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    marginBottom: '16px'
+                  }}>
+                    <Sparkles size={18} style={{ color: '#D8B43F', flexShrink: 0, marginTop: '2px' }} />
+                    <div style={{ fontSize: '13px', color: 'var(--color-primary)', lineHeight: '1.5' }}>
+                      <strong style={{ display: 'block', color: 'var(--color-primary)', marginBottom: '2px', fontWeight: '700' }}>
+                        Hệ thống tự động nhận diện danh sách
+                      </strong>
+                      Bạn chỉ cần dán mỗi dòng 1 câu chúc/Kinh Thánh (ví dụ: sao chép trực tiếp từ một cột trong Excel/Word), hệ thống sẽ tự động phân tích và sinh ra lát cắt cho vòng quay mà không bắt buộc phải sử dụng ký tự ngăn cách <code style={{ backgroundColor: 'rgba(15, 61, 46, 0.08)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: '700' }}>|</code>!
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="raw-text" style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: 'var(--color-primary)', fontWeight: '600', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '14px' }}>Nhập hoặc Dán danh sách Lộc Lời Chúa</span>
+                      <span style={{ fontWeight: '400', fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
+                        Dán danh sách câu chúc của bạn tại đây (mỗi dòng tương ứng với 1 lát cắt trên vòng quay).
+                      </span>
+                    </label>
+                    <textarea
+                      id="raw-text"
+                      className="form-control editor-textarea"
+                      value={rawText}
+                      onChange={(e) => setRawText(e.target.value)}
+                      placeholder={`CÁCH 1: Dán trực tiếp danh sách (Mỗi dòng một câu):\nChúa là mục tử chăn dắt tôi, tôi chẳng thiếu thốn gì.\nKính sợ Chúa là đầu mối sự khôn ngoan.\n\nCÁCH 2: Định dạng nâng cao (Phân cách bằng dấu '|')\nTên Lát Cắt | Trích Dẫn Kinh Thánh | Nội dung câu Lộc\nƠn khôn ngoan | Is 11,2 | Thần khí Khôn Ngoan giúp anh/chị luôn biết chọn lựa điều lành.`}
+                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '10px', minHeight: '260px', fontSize: '13px', lineHeight: '1.6' }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Right panel - Stats / History */}
+          {/* Right panel - Canvas & Card preview */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            
+
             {/* Real-time Preview Card */}
             <div className="card" style={{
               border: themePreset === 'christmas' ? '6px double #F59E0B' : '2px double var(--color-gold)',
@@ -1374,7 +2393,7 @@ export const AdminWheelEditor: React.FC = () => {
                 Xem Trước Vòng Quay
               </h3>
 
-              <div 
+              <div
                 className={themePreset === 'christmas' ? 'theme-christmas-layout' : ''}
                 style={{
                   position: 'relative',
@@ -1386,7 +2405,7 @@ export const AdminWheelEditor: React.FC = () => {
                   width: '100%',
                   maxWidth: '280px',
                   boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)',
-                  marginBottom: '12px',
+                  marginBottom: '16px',
                   ...(backgroundUrl.trim() ? {
                     backgroundImage: `url('${backgroundUrl.trim()}')`,
                     backgroundSize: 'cover',
@@ -1424,8 +2443,8 @@ export const AdminWheelEditor: React.FC = () => {
                 }}
               >
                 <canvas ref={canvasRef} width="240" height="240" style={{ maxWidth: '100%', display: 'block' }}></canvas>
-                
-                {/* Pointer pointer arrow */}
+
+                {/* Pointer arrow */}
                 <div style={{
                   position: 'absolute',
                   right: '12px',
@@ -1441,8 +2460,8 @@ export const AdminWheelEditor: React.FC = () => {
                 }}>
                   {themePreset === 'christmas' ? (
                     <svg viewBox="0 0 40 40" width="32" height="32">
-                      <path 
-                        d="M 4 20 L 22 17 L 18 12 L 25 14 L 28 4 L 31 14 L 38 12 L 34 17 L 37 20 L 34 23 L 38 28 L 31 26 L 28 36 L 25 26 L 18 28 L 22 23 Z" 
+                      <path
+                        d="M 4 20 L 22 17 L 18 12 L 25 14 L 28 4 L 31 14 L 38 12 L 34 17 L 37 20 L 34 23 L 38 28 L 31 26 L 28 36 L 25 26 L 18 28 L 22 23 Z"
                         fill="#D8B43F"
                         stroke="#FFF5D1"
                         strokeWidth="1"
@@ -1457,14 +2476,206 @@ export const AdminWheelEditor: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', textAlign: 'center' }}>
-                Thay đổi chủ đề màu sắc hoặc danh sách lộc bên trái để xem thay đổi ngay lập tức.
+              <button
+                type="button"
+                onClick={handleTestSpin}
+                disabled={isTestSpinning || blessings.length === 0}
+                className="btn btn-primary btn-gold"
+                style={{
+                  width: '100%',
+                  maxWidth: '240px',
+                  height: '40px',
+                  fontWeight: '700',
+                  gap: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {isTestSpinning ? <Loader className="animate-spin" size={16} /> : <Eye size={16} />}
+                <span>{isTestSpinning ? 'Đang quay...' : 'Quay Thử (Live Spin)'}</span>
+              </button>
+
+              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textAlign: 'center', marginTop: '12px' }}>
+                Nhấn "Quay Thử" để giả lập lượt quay và xem hiệu ứng trúng thiệp lộc thời gian thực.
+              </div>
+            </div>
+
+            {/* Thiệp Lộc Config & Live Card Preview */}
+            <div className="card" style={{ border: '1px solid rgba(216, 180, 63, 0.25)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.04)' }}>
+              <h3 className="text-serif" style={{ fontSize: '16px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(15, 61, 46, 0.08)', paddingBottom: '10px', marginBottom: '16px', fontWeight: '800' }}>
+                <Gift size={16} />
+                <span>Thiết lập Thiệp Lộc & Xem Trước</span>
+              </h3>
+
+              {/* Form Config Thiệp */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label htmlFor="card-template" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--color-primary)' }}>Template background thiệp</label>
+                    <select
+                      id="card-template"
+                      className="form-control"
+                      value={cardTemplate}
+                      onChange={(e) => setCardTemplate(e.target.value)}
+                      style={{ height: '36px', fontSize: '12.5px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                    >
+                      <option value="default">Default (Màu kem & Phụng vụ)</option>
+                      <option value="gold">Gold (Sang trọng viền vàng kim)</option>
+                      <option value="tet">Tết (Đỏ tươi hoa văn ngày xuân)</option>
+                      <option value="christmas">Giáng Sinh (Xanh thông & Tuyết vàng)</option>
+                      <option value="wood">Wood (Vân gỗ cổ điển ấm áp)</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label htmlFor="card-font" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--color-primary)' }}>Cỡ chữ nội dung thiệp (px)</label>
+                    <select
+                      id="card-font"
+                      className="form-control"
+                      value={cardFontSize}
+                      onChange={(e) => setCardFontSize(e.target.value)}
+                      style={{ height: '36px', fontSize: '12.5px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                    >
+                      <option value="13">13px (Nhỏ gọn)</option>
+                      <option value="15">15px (Vừa phải)</option>
+                      <option value="17">17px (Rõ ràng - Khuyên dùng)</option>
+                      <option value="19">19px (Lớn)</option>
+                      <option value="21">21px (Rất lớn)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label htmlFor="card-color" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--color-primary)', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Màu sắc chữ thiệp lộc</span>
+                    <span style={{ fontSize: '10.5px', color: 'var(--color-text-muted)', fontWeight: 'normal' }}>(Để trống để dùng màu tự động)</span>
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <input
+                      type="color"
+                      value={cardTextColor || '#0f3d2e'}
+                      onChange={(e) => setCardTextColor(e.target.value)}
+                      style={{ width: '40px', height: '36px', padding: 0, border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '6px', cursor: 'pointer' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Nhập mã màu HEX, VD: #0F3D2E"
+                      value={cardTextColor}
+                      onChange={(e) => setCardTextColor(e.target.value)}
+                      className="form-control"
+                      style={{ height: '36px', fontSize: '12.5px', flex: 1, border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                    />
+                    {cardTextColor && (
+                      <button
+                        type="button"
+                        onClick={() => setCardTextColor('')}
+                        className="btn btn-secondary"
+                        style={{ height: '36px', padding: '0 10px', fontSize: '12px' }}
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label htmlFor="card-greeting" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--color-primary)' }}>Lời chúc riêng chân thiệp</label>
+                  <textarea
+                    id="card-greeting"
+                    className="form-control"
+                    placeholder="ví dụ: Kính chúc quý cộng đoàn một năm mới an khang..."
+                    value={cardGreeting}
+                    onChange={(e) => setCardGreeting(e.target.value)}
+                    rows={2}
+                    style={{ fontSize: '12.5px', padding: '8px', resize: 'vertical', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                  />
+                </div>
+              </div>
+
+              {/* Live Preview Thiệp Lộc */}
+              <div style={{ display: 'flex', justifyContent: 'center', width: '100%', borderTop: '1px dashed rgba(15, 61, 46, 0.1)', paddingTop: '16px' }}>
+                <div
+                  style={{
+                    ...getCardBgStyle(cardTemplate, cardBorderColor),
+                    borderRadius: '20px',
+                    padding: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: '100%',
+                    maxWidth: '320px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <div
+                    style={{
+                      border: `1.5px solid ${cardBorderColor}`,
+                      borderRadius: '14px',
+                      padding: '16px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      textAlign: 'center',
+                      position: 'relative',
+                      boxSizing: 'border-box',
+                      width: '100%',
+                      minHeight: '260px',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <CornerOrnamentSVG style={{ top: '6px', left: '6px', color: cardBorderColor }} isChristmas={cardTemplate === 'christmas'} />
+                    <CornerOrnamentSVG style={{ top: '6px', right: '6px', transform: 'scaleX(-1)', color: cardBorderColor }} isChristmas={cardTemplate === 'christmas'} />
+                    <CornerOrnamentSVG style={{ bottom: '6px', left: '6px', transform: 'scaleY(-1)', color: cardBorderColor }} isChristmas={cardTemplate === 'christmas'} />
+                    <CornerOrnamentSVG style={{ bottom: '6px', right: '6px', transform: 'scaleX(-1) scaleY(-1)', color: cardBorderColor }} isChristmas={cardTemplate === 'christmas'} />
+
+                    <svg viewBox="0 0 24 24" width="28" height="28" style={{ color: cardBorderColor, marginBottom: '6px' }} fill="currentColor">
+                      <path d="M12,5 A1.2,1.2 0 1,1 12,2.6 A1.2,1.2 0 1,1 12,5 Z" />
+                      <path d="M5,12 A1.2,1.2 0 1,1 2.6,12 A1.2,1.2 0 1,1 5,12 Z" />
+                      <path d="M21.4,12 A1.2,1.2 0 1,1 19,12 A1.2,1.2 0 1,1 21.4,12 Z" />
+                      <path d="M11,5 L13,5 L13,11 L19,11 L19,13 L13,13 L13,19 C13,19.6 12.6,20.1 12,20.1 C11.4,20.1 10.9,19.6 10.9,19 L10.9,13 L5,13 L5,11 L11,11 Z" />
+                      <path d="M12,8.5 L15.5,12 L12,15.5 L8.5,12 Z" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                    </svg>
+
+                    <div style={{ color: previewCardTextColor, fontWeight: 700, fontSize: '9px', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '3px', fontFamily: "'Inter', sans-serif" }}>
+                      {parish?.name}
+                    </div>
+
+                    <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '17px', fontWeight: 800, color: previewCardTextColor, margin: '0 0 6px 0', letterSpacing: '0.5px' }}>
+                      LỘC LỜI CHÚA
+                    </h2>
+
+                    <div style={{ display: 'flex', alignItems: 'center', width: '50%', margin: '0 auto 8px auto', gap: '6px' }}>
+                      <div style={{ height: '1px', flex: 1, background: `linear-gradient(to right, transparent, ${cardBorderColor}, transparent)` }}></div>
+                      <span style={{ color: cardBorderColor, fontSize: '8px' }}>✦</span>
+                      <div style={{ height: '1px', flex: 1, background: `linear-gradient(to left, transparent, ${cardBorderColor}, transparent)` }}></div>
+                    </div>
+
+                    <div style={{ fontSize: '9px', fontWeight: 800, color: getTextContrastColor(presetColors[0], themePreset), background: presetColors[0], padding: '4px 10px', borderRadius: '12px', marginBottom: '10px', border: `1.2px solid ${cardBorderColor}`, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      {previewBlessingSample.category}
+                    </div>
+
+                    <p style={{ fontSize: previewCardFontSize, lineHeight: '1.5', color: previewCardTextColor, fontStyle: 'italic', margin: '4px 0 8px 0', padding: '0 8px', fontWeight: 500 }}>
+                      “ {previewBlessingSample.text} ”
+                    </p>
+
+                    {previewBlessingSample.quote && (
+                      <p style={{ fontWeight: '700', fontSize: '11.5px', color: previewCardTextColor, marginTop: '2px', marginBottom: '10px', fontStyle: 'italic' }}>
+                        — {previewBlessingSample.quote}
+                      </p>
+                    )}
+
+                    <div style={{ height: '1px', width: '30%', background: `linear-gradient(to right, transparent, ${cardBorderColor}60, transparent)`, margin: '0 auto 8px auto' }}></div>
+
+                    <p style={{ fontSize: '9px', color: previewCardTextColor, fontWeight: '500', fontStyle: 'italic', lineHeight: '1.4', margin: 0, opacity: 0.85, whiteSpace: 'pre-line' }}>
+                      {cardGreeting || parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Short info / Share Card */}
             <div className="card" style={{ background: 'var(--color-primary)', color: '#FFFFFF', border: '2px double var(--color-gold)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.15)', position: 'relative' }}>
-              {/* Corner Ornaments */}
               <div className="corner-ornament top-left" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', top: '8px', left: '8px' }}></div>
               <div className="corner-ornament top-right" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', top: '8px', right: '8px' }}></div>
               <div className="corner-ornament bottom-left" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', bottom: '8px', left: '8px' }}></div>
@@ -1474,14 +2685,14 @@ export const AdminWheelEditor: React.FC = () => {
               <p style={{ fontSize: '12.5px', opacity: 0.85, lineHeight: '1.6', marginBottom: '16px' }}>
                 Giáo dân quét mã QR hoặc truy cập đường dẫn này để nhận Lộc Lời Chúa. Bạn có thể sao chép liên kết hoặc in mã QR.
               </p>
-              
+
               <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', padding: '12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontFamily: 'monospace' }}>
                 <div>Friendly URL:</div>
                 <div style={{ color: 'var(--color-gold)', wordBreak: 'break-all' }}>
                   {`/giao-xu/${parish?.slug}/vong-quay/${slug}`}
                 </div>
               </div>
-              
+
               <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
                 <a
                   href={`/giao-xu/${parish?.slug}/vong-quay/${slug}`}
@@ -1544,6 +2755,133 @@ export const AdminWheelEditor: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Modal hiển thị thiệp lộc khi Quay Thử (Test Spin) */}
+      {showTestWinnerModal && testWinner && (
+        <div
+          onClick={() => setShowTestWinnerModal(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              ...getCardBgStyle(cardTemplate, cardBorderColor),
+              borderRadius: '24px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              width: '100%',
+              maxWidth: '420px',
+              position: 'relative'
+            }}
+          >
+            {/* Nút đóng */}
+            <button
+              onClick={() => setShowTestWinnerModal(false)}
+              style={{
+                position: 'absolute',
+                top: '-12px',
+                right: '-12px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: '#FFFFFF',
+                border: `1.5px solid ${cardBorderColor}`,
+                color: primaryDark,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+                zIndex: 10
+              }}
+            >
+              <X size={18} strokeWidth={2.5} />
+            </button>
+
+            <div style={{ border: `1px solid ${cardBorderColor}a0`, borderRadius: '16px', padding: '4px', width: '100%', display: 'flex', flexDirection: 'column' }}>
+              <div
+                style={{
+                  border: `1.5px solid ${cardBorderColor}`,
+                  borderRadius: '12px',
+                  padding: '28px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  position: 'relative',
+                  width: '100%',
+                  minHeight: '340px',
+                  justifyContent: 'center'
+                }}
+              >
+                <CornerOrnamentSVG style={{ top: '8px', left: '8px', color: cardBorderColor }} isChristmas={cardTemplate === 'christmas'} />
+                <CornerOrnamentSVG style={{ top: '8px', right: '8px', transform: 'scaleX(-1)', color: cardBorderColor }} isChristmas={cardTemplate === 'christmas'} />
+                <CornerOrnamentSVG style={{ bottom: '8px', left: '8px', transform: 'scaleY(-1)', color: cardBorderColor }} isChristmas={cardTemplate === 'christmas'} />
+                <CornerOrnamentSVG style={{ bottom: '8px', right: '8px', transform: 'scaleX(-1) scaleY(-1)', color: cardBorderColor }} isChristmas={cardTemplate === 'christmas'} />
+
+                <svg viewBox="0 0 24 24" width="36" height="36" style={{ color: cardBorderColor, marginBottom: '10px' }} fill="currentColor">
+                  <path d="M12,5 A1.2,1.2 0 1,1 12,2.6 A1.2,1.2 0 1,1 12,5 Z" />
+                  <path d="M5,12 A1.2,1.2 0 1,1 2.6,12 A1.2,1.2 0 1,1 5,12 Z" />
+                  <path d="M21.4,12 A1.2,1.2 0 1,1 19,12 A1.2,1.2 0 1,1 21.4,12 Z" />
+                  <path d="M11,5 L13,5 L13,11 L19,11 L19,13 L13,13 L13,19 C13,19.6 12.6,20.1 12,20.1 C11.4,20.1 10.9,19.6 10.9,19 L10.9,13 L5,13 L5,11 L11,11 Z" />
+                  <path d="M12,8.5 L15.5,12 L12,15.5 L8.5,12 Z" fill="none" stroke="currentColor" strokeWidth="0.8" />
+                </svg>
+
+                <div style={{ color: previewCardTextColor, fontWeight: 700, fontSize: '10.5px', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '4px', fontFamily: "'Inter', sans-serif" }}>
+                  {parish?.name}
+                </div>
+
+                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: 800, color: previewCardTextColor, margin: '0 0 10px 0', letterSpacing: '0.5px' }}>
+                  LỘC LỜI CHÚA
+                </h2>
+
+                <div style={{ display: 'flex', alignItems: 'center', width: '60%', margin: '0 auto 12px auto', gap: '8px' }}>
+                  <div style={{ height: '1px', flex: 1, background: `linear-gradient(to right, transparent, ${cardBorderColor}, transparent)` }}></div>
+                  <span style={{ color: cardBorderColor, fontSize: '9px' }}>✦</span>
+                  <div style={{ height: '1px', flex: 1, background: `linear-gradient(to left, transparent, ${cardBorderColor}, transparent)` }}></div>
+                </div>
+
+                <div style={{ fontSize: '11px', fontWeight: 800, color: getTextContrastColor(presetColors[0], themePreset), background: presetColors[0], padding: '6px 14px', borderRadius: '16px', marginBottom: '16px', border: `1.2px solid ${cardBorderColor}`, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {testWinner.category}
+                </div>
+
+                <p style={{ fontSize: previewCardFontSize, lineHeight: '1.6', color: previewCardTextColor, fontStyle: 'italic', margin: '6px 0 10px 0', padding: '0 12px', fontWeight: 500 }}>
+                  “ {testWinner.text} ”
+                </p>
+
+                {testWinner.quote && (
+                  <p style={{ fontWeight: '700', fontSize: '13px', color: previewCardTextColor, marginTop: '4px', marginBottom: '14px', fontStyle: 'italic' }}>
+                    — {testWinner.quote}
+                  </p>
+                )}
+
+                <div style={{ height: '1px', width: '35%', background: `linear-gradient(to right, transparent, ${cardBorderColor}80, transparent)`, margin: '0 auto 12px auto' }}></div>
+
+                <p style={{ fontSize: '10px', color: previewCardTextColor, fontWeight: '500', fontStyle: 'italic', lineHeight: '1.5', margin: 0, opacity: 0.85, whiteSpace: 'pre-line' }}>
+                  {cardGreeting || parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
+                </p>
+
+                <div style={{ marginTop: '14px', fontSize: '8.5px', color: `${cardBorderColor}b0`, letterSpacing: '1px', textTransform: 'uppercase', fontWeight: 700 }}>
+                  Chế độ Quay Thử • Vòng Quay Lời Chúa
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast notifications */}
       {toast && (

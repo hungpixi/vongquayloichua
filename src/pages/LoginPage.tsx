@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../services/supabaseClient';
-import { Church, Loader, ShieldAlert } from 'lucide-react';
+import { Church, Loader, ShieldAlert, CheckCircle2, Mail } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { signIn } = useAuth();
+  const { signIn, signInWithOtp } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState(() => localStorage.getItem('remembered_email') || '');
   const [password, setPassword] = useState('');
+  const [loginMode, setLoginMode] = useState<'password' | 'otp'>('password');
+  const [otpSent, setOtpSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -19,9 +21,15 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      await signIn(email, password);
-      localStorage.setItem('remembered_email', email);
-      navigate('/admin');
+      if (loginMode === 'password') {
+        await signIn(email, password);
+        localStorage.setItem('remembered_email', email);
+        navigate('/admin');
+      } else {
+        await signInWithOtp(email, false);
+        localStorage.setItem('remembered_email', email);
+        setOtpSent(true);
+      }
     } catch (err: unknown) {
       console.error(err);
       const msg = err instanceof Error 
@@ -30,7 +38,7 @@ export const LoginPage: React.FC = () => {
         ? String((err as Record<string, unknown>).message) 
         : typeof err === 'string'
         ? err
-        : 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.';
+        : 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -63,7 +71,7 @@ export const LoginPage: React.FC = () => {
             Đăng nhập Quản trị
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
-            Nhập email và mật khẩu của Cha để quản lý vòng quay
+            Quản lý vòng quay Lộc Chúa của Giáo xứ
           </p>
         </div>
 
@@ -86,68 +94,163 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          <div className="form-group">
-            <label htmlFor="email" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-              Email tài khoản
-            </label>
-            <input
-              id="email"
-              type="text"
-              className="form-control"
-              placeholder="cha-xu@gmail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-              Mật khẩu
-            </label>
-            <input
-              id="password"
-              type="password"
-              className="form-control"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
-            />
-          </div>
-
-          {!supabase && (
-            <div style={{ 
-              fontSize: '12px', 
-              color: 'var(--color-primary-soft)', 
-              backgroundColor: 'rgba(15, 61, 46, 0.05)', 
-              padding: '10px', 
-              borderRadius: '8px', 
-              textAlign: 'center', 
-              border: '1px solid rgba(15, 61, 46, 0.1)' 
-            }}>
-              Chế độ chạy thử: Dùng tài khoản <strong>devadmin</strong> để đăng nhập.
+        {otpSent ? (
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            gap: '16px', 
+            textAlign: 'center',
+            padding: '16px 0' 
+          }}>
+            <CheckCircle2 size={48} style={{ color: 'var(--color-success)' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <h3 style={{ fontSize: '18px', color: 'var(--color-primary)', fontWeight: '700' }}>
+                Đã gửi liên kết đăng nhập!
+              </h3>
+              <p style={{ fontSize: '13.5px', color: 'var(--color-text-muted)', lineHeight: '1.5' }}>
+                Một liên kết đăng nhập trực tiếp (Magic Link) đã được gửi đến địa chỉ email <strong>{email}</strong>.
+              </p>
+              <p style={{ fontSize: '12.5px', color: 'var(--color-text-muted)', fontStyle: 'italic', marginTop: '6px' }}>
+                Vui lòng kiểm tra hộp thư đến (và cả hộp thư Spam/Thư rác) rồi nhấn vào nút để đăng nhập.
+              </p>
             </div>
-          )}
+            <button 
+              onClick={() => setOtpSent(false)} 
+              className="btn btn-secondary" 
+              style={{ width: '100%', height: '42px', marginTop: '12px' }}
+            >
+              Quay lại đăng nhập
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            {/* Mode Switcher */}
+            <div style={{ display: 'flex', background: 'rgba(15, 61, 46, 0.05)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(15, 61, 46, 0.08)' }}>
+              <button
+                type="button"
+                onClick={() => { setLoginMode('password'); setError(null); }}
+                style={{ 
+                  flex: 1, 
+                  padding: '8px', 
+                  fontSize: '12.5px', 
+                  border: 'none', 
+                  borderRadius: '6px', 
+                  background: loginMode === 'password' ? 'var(--color-gold)' : 'transparent', 
+                  color: loginMode === 'password' ? '#FFFFFF' : 'var(--color-primary)', 
+                  cursor: 'pointer', 
+                  fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Mật khẩu
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLoginMode('otp'); setError(null); }}
+                style={{ 
+                  flex: 1, 
+                  padding: '8px', 
+                  fontSize: '12.5px', 
+                  border: 'none', 
+                  borderRadius: '6px', 
+                  background: loginMode === 'otp' ? 'var(--color-gold)' : 'transparent', 
+                  color: loginMode === 'otp' ? '#FFFFFF' : 'var(--color-primary)', 
+                  cursor: 'pointer', 
+                  fontWeight: '600',
+                  transition: 'all 0.2s'
+                }}
+              >
+                Không dùng mật khẩu
+              </button>
+            </div>
 
-          <button
-            type="submit"
-            className="btn btn-primary btn-gold text-serif"
-            style={{ width: '100%', height: '46px', fontSize: '14px', marginTop: '4px' }}
-            disabled={loading}
-          >
-            {loading ? <Loader className="animate-spin" size={18} /> : 'Đăng nhập'}
-          </button>
-        </form>
+            <div className="form-group">
+              <label htmlFor="email" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+                Email tài khoản
+              </label>
+              <input
+                id="email"
+                type="email"
+                className="form-control"
+                placeholder="cha-xu@gmail.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+              />
+            </div>
 
-        <div style={{ textAlign: 'center', fontSize: '13px', marginTop: '-8px' }}>
-          <Link to="/forgot-password" style={{ color: 'var(--color-primary-soft)', textDecoration: 'underline' }}>
-            Quên mật khẩu?
-          </Link>
-        </div>
+            {loginMode === 'password' && (
+              <div className="form-group">
+                <label htmlFor="password" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+                  Mật khẩu
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  className="form-control"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                />
+              </div>
+            )}
+
+            {loginMode === 'otp' && (
+              <div style={{ 
+                fontSize: '12px', 
+                color: 'var(--color-text-muted)', 
+                backgroundColor: 'rgba(216, 180, 63, 0.05)', 
+                padding: '10px 12px', 
+                borderRadius: '8px', 
+                border: '1px solid rgba(216, 180, 63, 0.15)',
+                lineHeight: '1.5',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px'
+              }}>
+                <Mail size={16} style={{ color: 'var(--color-gold)', flexShrink: 0, marginTop: '2px' }} />
+                <span>
+                  Hệ thống sẽ gửi một liên kết đăng nhập trực tiếp (Magic Link) vào email của bạn. Nhấp vào liên kết để truy cập ngay mà không cần nhập mật khẩu.
+                </span>
+              </div>
+            )}
+
+            {!supabase && loginMode === 'password' && (
+              <div style={{ 
+                fontSize: '12px', 
+                color: 'var(--color-primary-soft)', 
+                backgroundColor: 'rgba(15, 61, 46, 0.05)', 
+                padding: '10px', 
+                borderRadius: '8px', 
+                textAlign: 'center', 
+                border: '1px solid rgba(15, 61, 46, 0.1)' 
+              }}>
+                Chế độ chạy thử: Dùng tài khoản <strong>devadmin</strong> để đăng nhập.
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-primary btn-gold text-serif"
+              style={{ width: '100%', height: '46px', fontSize: '14px', marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+              disabled={loading}
+            >
+              {loading ? <Loader className="animate-spin" size={18} /> : loginMode === 'password' ? 'Đăng nhập' : 'Nhận liên kết đăng nhập'}
+            </button>
+          </form>
+        )}
+
+        {!otpSent && loginMode === 'password' && (
+          <div style={{ textAlign: 'center', fontSize: '13px', marginTop: '-8px' }}>
+            <Link to="/forgot-password" style={{ color: 'var(--color-primary-soft)', textDecoration: 'underline' }}>
+              Quên mật khẩu?
+            </Link>
+          </div>
+        )}
 
         <div style={{ textAlign: 'center', fontSize: '13px', color: 'var(--color-text-muted)', borderTop: '1px solid rgba(15, 61, 46, 0.08)', paddingTop: '16px', marginTop: '8px' }}>
           Chưa có tài khoản?{' '}

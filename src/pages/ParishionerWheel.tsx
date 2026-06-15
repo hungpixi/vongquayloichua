@@ -8,9 +8,19 @@ import confetti from 'canvas-confetti';
 import html2canvas from 'html2canvas';
 import { supabase } from '../services/supabaseClient';
 import { getDeviceFingerprint } from '../utils/fingerprint';
+import { verifyHmacSignature } from '../utils/crypto';
+
+interface CornerOrnamentProps {
+  style?: React.CSSProperties;
+  isChristmas?: boolean;
+  flipX?: boolean;
+  flipY?: boolean;
+}
 
 // Component vẽ hoa văn góc cho thiệp Lộc Lời Chúa dạng vector sắc nét, chất lượng cao
-const CornerOrnamentSVG: React.FC<{ style?: React.CSSProperties; isChristmas?: boolean }> = ({ style, isChristmas }) => {
+const CornerOrnamentSVG: React.FC<CornerOrnamentProps> = ({ style, isChristmas, flipX, flipY }) => {
+  const transform = `scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})`;
+
   if (isChristmas) {
     return (
       <svg 
@@ -24,41 +34,58 @@ const CornerOrnamentSVG: React.FC<{ style?: React.CSSProperties; isChristmas?: b
           ...style
         }}
       >
-        <path 
-          d="M2 2h14M2 2v14M5 5h8M5 5v8" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="1.2" 
-          strokeLinecap="round"
-        />
-        <path 
-          d="M8 2.5 L9.2 6 L12.7 7.2 L9.2 8.4 L8 11.9 L6.8 8.4 L3.3 7.2 L6.8 6 Z" 
-          fill="currentColor"
-        />
+        <g transform={transform} style={{ transformOrigin: '12px 12px' }}>
+          <path 
+            d="M2 2h14M2 2v14M5 5h8M5 5v8" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="1.2" 
+            strokeLinecap="round"
+          />
+          <path 
+            d="M8 2.5 L9.2 6 L12.7 7.2 L9.2 8.4 L8 11.9 L6.8 8.4 L3.3 7.2 L6.8 6 Z" 
+            fill="currentColor"
+          />
+        </g>
       </svg>
     );
   }
 
   return (
     <svg 
-      viewBox="0 0 24 24" 
+      viewBox="0 0 40 40" 
       style={{
         position: 'absolute',
-        width: '22px',
-        height: '22px',
+        width: '30px',
+        height: '30px',
         color: 'inherit',
         pointerEvents: 'none',
         ...style
       }}
     >
-      <path 
-        d="M2 2h16M2 2v16M5 5h10M5 5v10" 
-        fill="none" 
-        stroke="currentColor" 
-        strokeWidth="1.2" 
-        strokeLinecap="round"
-      />
-      <circle cx="5" cy="5" r="1.5" fill="currentColor" />
+      <g transform={transform} style={{ transformOrigin: '20px 20px' }}>
+        {/* Baroque/Gothic scrollwork */}
+        <path 
+          d="M 4 4 H 36 C 24 8, 16 16, 16 28 C 16 18, 8 16, 4 16 Z" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="1.5" 
+        />
+        <path 
+          d="M 4 4 V 36 C 8 24, 16 16, 28 16 C 18 16, 16 8, 16 4" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="1.5" 
+        />
+        <path
+          d="M 8 8 C 18 10, 20 20, 8 8 Z"
+          fill="currentColor"
+          opacity="0.85"
+        />
+        <circle cx="6" cy="6" r="2.5" fill="currentColor" />
+        <circle cx="16" cy="6" r="1.5" fill="currentColor" />
+        <circle cx="6" cy="16" r="1.5" fill="currentColor" />
+      </g>
     </svg>
   );
 };
@@ -147,6 +174,31 @@ const adjustColorBrightness = (hex: string, percent: number) => {
   return '#' + ((1 << 24) + (R << 16) + (G << 8) + B).toString(16).slice(1);
 };
 
+// Helper to check if a lock duration has expired
+const isLockExpired = (lockDuration: string | undefined, timestamp: number): boolean => {
+  if (!lockDuration || lockDuration === 'none') return true;
+  if (lockDuration === 'forever') return false;
+  
+  const match = lockDuration.match(/^(\d+)([hmds])$/i);
+  if (!match) return true; // Invalid format defaults to expired
+  
+  const value = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  let ms = 0;
+  
+  if (unit === 'h') {
+    ms = value * 60 * 60 * 1000;
+  } else if (unit === 'm') {
+    ms = value * 60 * 1000;
+  } else if (unit === 'd') {
+    ms = value * 24 * 60 * 60 * 1000;
+  } else if (unit === 's') {
+    ms = value * 1000;
+  }
+  
+  return Date.now() - timestamp >= ms;
+};
+
 export const ParishionerWheel: React.FC = () => {
   const { parishSlug, wheelSlug, wheelId } = useParams<{ parishSlug?: string; wheelSlug?: string; wheelId?: string }>();
   const [parish, setParish] = useState<Parish | null>(null);
@@ -160,6 +212,9 @@ export const ParishionerWheel: React.FC = () => {
   const [lockedBlessing, setLockedBlessing] = useState<LockedBlessing | null>(null);
   const [isAdClosed, setIsAdClosed] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  const [cachedBgUrl, setCachedBgUrl] = useState<string>('');
+  const [cachedLogoUrl, setCachedLogoUrl] = useState<string>('');
 
   // DIY Audio States
   const [isBgmPlaying, setIsBgmPlaying] = useState(false);
@@ -214,7 +269,8 @@ export const ParishionerWheel: React.FC = () => {
 
   const decodeSharePayload = (payload: string) => {
     try {
-      let base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+      // Defensively replace space or whitespace with '+'
+      let base64 = payload.replace(/\s/g, '+').replace(/-/g, '+').replace(/_/g, '/');
       while (base64.length % 4) {
         base64 += '=';
       }
@@ -302,10 +358,26 @@ export const ParishionerWheel: React.FC = () => {
   };
 
   const getLayoutBackground = (preset?: string) => {
-    let bgUrl = wheel?.background_url || parish?.background_url || '/parish_bg.png';
-    if (!wheel?.background_url && !parish?.background_url && preset && preset !== 'gold') {
-      bgUrl = `/themes/bg_${preset}.png`;
+    let bgUrl = cachedBgUrl;
+    if (!bgUrl) {
+      bgUrl = wheel?.background_url || parish?.background_url || '';
+      if (!bgUrl && preset && preset !== 'gold') {
+        bgUrl = `/themes/bg_${preset}.png`;
+      }
+      if (!bgUrl) {
+        bgUrl = '/parish_bg.png';
+      }
     }
+
+    if (preset === 'christmas' && !wheel?.background_url && !parish?.background_url) {
+      return {
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed',
+      };
+    }
+
     return {
       backgroundImage: `url('${bgUrl}')`,
       backgroundSize: 'cover',
@@ -314,6 +386,43 @@ export const ParishionerWheel: React.FC = () => {
       backgroundAttachment: 'fixed',
     };
   };
+
+  useEffect(() => {
+    const resolveImages = async () => {
+      if (!wheel && !parish) return;
+      
+      let bgUrl = wheel?.background_url || parish?.background_url || '';
+      if (!bgUrl && wheel?.theme_preset && wheel.theme_preset !== 'gold') {
+        bgUrl = `/themes/bg_${wheel.theme_preset}.png`;
+      }
+      if (!bgUrl) {
+        bgUrl = '/parish_bg.png';
+      }
+      
+      try {
+        const localBg = await dbService.getCachedAssetUrl(bgUrl);
+        setCachedBgUrl(localBg);
+      } catch (err) {
+        console.warn('Failed to resolve cached background image:', err);
+        setCachedBgUrl(bgUrl);
+      }
+
+      const logoUrl = parish?.logo_url || '';
+      if (logoUrl) {
+        try {
+          const localLogo = await dbService.getCachedAssetUrl(logoUrl);
+          setCachedLogoUrl(localLogo);
+        } catch (err) {
+          console.warn('Failed to resolve cached logo image:', err);
+          setCachedLogoUrl(logoUrl);
+        }
+      } else {
+        setCachedLogoUrl('');
+      }
+    };
+
+    resolveImages();
+  }, [wheel, parish]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -324,21 +433,56 @@ export const ParishionerWheel: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      let res = null;
-      if (wheelId) {
-        res = await dbService.getWheelById(wheelId);
-      } else if (parishSlug && wheelSlug) {
-        res = await dbService.getWheelBySlugs(parishSlug, wheelSlug);
+      let res: { parish: Parish, wheel: Wheel } | null = null;
+      let blessingsList: Blessing[] = [];
+      let loadedFromConfig = false;
+
+      // 1. Try to load from public storage bucket first if online
+      if (parishSlug && wheelSlug && supabase) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+        if (supabaseUrl) {
+          const publicJsonUrl = `${supabaseUrl}/storage/v1/object/public/configs/${parishSlug}/${wheelSlug}.json`;
+          try {
+            const response = await fetch(publicJsonUrl);
+            if (response.ok) {
+              const configData = await response.json();
+              if (configData && configData.parish && configData.wheel && configData.blessings) {
+                res = { parish: configData.parish, wheel: configData.wheel };
+                blessingsList = configData.blessings;
+                loadedFromConfig = true;
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to load edge config JSON from storage, falling back to database query:', e);
+          }
+        }
+      }
+
+      // 2. Fallback to database queries if not loaded from config JSON
+      if (!loadedFromConfig) {
+        if (wheelId) {
+          res = await dbService.getWheelById(wheelId);
+        } else if (parishSlug && wheelSlug) {
+          res = await dbService.getWheelBySlugs(parishSlug, wheelSlug);
+        }
+
+        if (!res) {
+          if (isMountedRef.current) setError('Không tìm thấy Vòng quay hoặc đường dẫn đã hết hạn.');
+          return;
+        }
+
+        blessingsList = await dbService.getBlessings(res.wheel.id);
       }
 
       if (!res) {
-        if (isMountedRef.current) setError('Không tìm thấy Vòng quay hoặc đường dẫn đã hết hạn.');
+        if (isMountedRef.current) setError('Không tìm thấy Vòng quay hoặc dữ liệu không hợp lệ.');
         return;
       }
 
       if (!isMountedRef.current) return;
       setParish(res.parish);
       setWheel(res.wheel);
+      setBlessings(blessingsList);
 
       // Check for developer reset parameter
       const searchParams = new URLSearchParams(window.location.search);
@@ -354,24 +498,17 @@ export const ParishionerWheel: React.FC = () => {
         window.history.replaceState({}, '', newUrl);
       }
 
-      const blessingsList = await dbService.getBlessings(res.wheel.id);
-      if (!isMountedRef.current) return;
-      setBlessings(blessingsList);
-
       // Check locked spun blessing
       let spun = null;
       if (res.wheel.lock_duration !== 'none') {
         const sessionSpun = sessionStorage.getItem(`session_spun_blessing_${res.wheel.id}`);
         if (sessionSpun) {
           const parsed = JSON.parse(sessionSpun);
-          const now = Date.now();
-          if (
-            res.wheel.lock_duration === 'forever' ||
-            (res.wheel.lock_duration === '24h' && now - parsed.timestamp < 24 * 60 * 60 * 1000)
-          ) {
+          if (!isLockExpired(res.wheel.lock_duration, parsed.timestamp)) {
             spun = parsed;
           } else {
             sessionStorage.removeItem(`session_spun_blessing_${res.wheel.id}`);
+            localStorage.removeItem(`spun_blessing_${res.wheel.id}`);
           }
         }
 
@@ -379,16 +516,17 @@ export const ParishionerWheel: React.FC = () => {
           const localSpun = localStorage.getItem(`spun_blessing_${res.wheel.id}`);
           if (localSpun) {
             const parsed = JSON.parse(localSpun);
-            const now = Date.now();
-            if (res.wheel.lock_duration === 'forever') {
-              spun = parsed;
-            } else if (res.wheel.lock_duration === '24h' && now - parsed.timestamp < 24 * 60 * 60 * 1000) {
+            if (!isLockExpired(res.wheel.lock_duration, parsed.timestamp)) {
               spun = parsed;
             } else {
+              sessionStorage.removeItem(`session_spun_blessing_${res.wheel.id}`);
               localStorage.removeItem(`spun_blessing_${res.wheel.id}`);
             }
           }
         }
+      } else {
+        sessionStorage.removeItem(`session_spun_blessing_${res.wheel.id}`);
+        localStorage.removeItem(`spun_blessing_${res.wheel.id}`);
       }
 
       if (spun) {
@@ -414,6 +552,8 @@ export const ParishionerWheel: React.FC = () => {
           const anglePerSegment = (2 * Math.PI) / displayLen;
           spinAngleRef.current = 2 * Math.PI - (slotIdx + 0.5) * anglePerSegment;
         }
+      } else {
+        setLockedBlessing(null);
       }
 
       // Check for share payload parameter `s` in URL
@@ -422,7 +562,17 @@ export const ParishionerWheel: React.FC = () => {
       if (sParam) {
         const decoded = decodeSharePayload(sParam);
         if (decoded && decoded.b) {
-          const sharedBlessing = blessingsList.find(b => b.id === decoded.b);
+          let sharedBlessing = blessingsList.find(b => b.id === decoded.b);
+          if (!sharedBlessing && supabase) {
+            const { data: dbBlessing } = await supabase
+              .from('blessings')
+              .select('*')
+              .eq('id', decoded.b)
+              .maybeSingle();
+            if (dbBlessing) {
+              sharedBlessing = dbBlessing as Blessing;
+            }
+          }
           if (sharedBlessing) {
             setWinnerBlessing(sharedBlessing);
             setShowWinnerModal(true);
@@ -461,6 +611,14 @@ export const ParishionerWheel: React.FC = () => {
         } else {
           const activeOpt = BGM_OPTIONS.find(opt => opt.id === bgmId) || BGM_OPTIONS[0];
           audioUrl = activeOpt.url;
+        }
+
+        if (audioUrl) {
+          try {
+            audioUrl = await dbService.getCachedAssetUrl(audioUrl);
+          } catch (err) {
+            console.warn('Failed to cache BGM audio:', err);
+          }
         }
 
         if (!bgmAudioRef.current && audioUrl) {
@@ -622,13 +780,13 @@ export const ParishionerWheel: React.FC = () => {
         if (displayLen > 30) {
           const numMatch = text.match(/\d+/);
           text = numMatch ? numMatch[0] : `${i + 1}`;
-          fontSize = displayLen > 80 ? '9px' : displayLen > 50 ? '11px' : '12px';
+          fontSize = displayLen > 80 ? '11px' : displayLen > 50 ? '13px' : '14px';
         } else {
-          fontSize = displayLen > 20 ? '11px' : '13px';
+          fontSize = displayLen > 20 ? '15px' : '18px';
         }
       } else if (displayType === 'number') {
         text = String(i + 1);
-        fontSize = displayLen > 20 ? '13px' : '16px';
+        fontSize = displayLen > 20 ? '16px' : '20px';
       } else if (displayType === 'icon') {
         text = RELIGIOUS_ICONS[i % RELIGIOUS_ICONS.length];
         fontSize = '18px';
@@ -827,6 +985,30 @@ export const ParishionerWheel: React.FC = () => {
 
   const handleStartSpin = useCallback(async () => {
     if (isSpinningRef.current || isSpinning || blessings.length < 2 || !wheel) return;
+
+    // Check client-side lock before starting spin
+    if (wheel.lock_duration !== 'none') {
+      const sessionSpun = sessionStorage.getItem(`session_spun_blessing_${wheel.id}`);
+      const localSpun = localStorage.getItem(`spun_blessing_${wheel.id}`);
+      let existingLock = null;
+      if (sessionSpun) {
+        existingLock = JSON.parse(sessionSpun);
+      } else if (localSpun) {
+        existingLock = JSON.parse(localSpun);
+      }
+
+      if (existingLock && !isLockExpired(wheel.lock_duration, existingLock.timestamp)) {
+        showToast('Bạn đã nhận Lộc Lời Chúa. Vui lòng đợi đến lượt quay tiếp theo.');
+        return;
+      } else if (existingLock) {
+        // Lock has expired, clean up
+        sessionStorage.removeItem(`session_spun_blessing_${wheel.id}`);
+        localStorage.removeItem(`spun_blessing_${wheel.id}`);
+        setLockedBlessing(null);
+        setWinnerBlessing(null);
+      }
+    }
+
     initAudio();
 
     // Kích hoạt BGM nếu được bật và đang bị browser block/mute
@@ -850,9 +1032,33 @@ export const ParishionerWheel: React.FC = () => {
       // 1. Get device fingerprint and session user
       const fingerprint = await getDeviceFingerprint();
       let session_token = '';
+      let session_id = '';
       if (supabase) {
+        let session = null;
         const { data: sessionData } = await supabase.auth.getSession();
-        session_token = sessionData?.session?.access_token || '';
+        if (sessionData?.session) {
+          session = sessionData.session;
+        } else {
+          try {
+            const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+            if (anonError) {
+              console.error('Supabase Anonymous Auth failed:', anonError);
+            } else if (anonData?.session) {
+              session = anonData.session;
+            } else {
+              const { data: refetchedSession } = await supabase.auth.getSession();
+              if (refetchedSession?.session) {
+                session = refetchedSession.session;
+              }
+            }
+          } catch (anonErr) {
+            console.error('Anonymous sign in error in spin flow:', anonErr);
+          }
+        }
+        if (session) {
+          session_token = session.access_token || '';
+          session_id = session.user?.id || '';
+        }
       }
 
       // 2. Call /api/spin to fetch result
@@ -860,6 +1066,10 @@ export const ParishionerWheel: React.FC = () => {
       let targetAngle = 0;
       
       try {
+        if (!supabase) {
+          throw new Error('Supabase is offline, bypass /api/spin');
+        }
+
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
         };
@@ -874,6 +1084,7 @@ export const ParishionerWheel: React.FC = () => {
             wheel_id: wheel.id,
             fingerprint,
             session_token,
+            session_id,
           }),
         });
 
@@ -886,6 +1097,16 @@ export const ParishionerWheel: React.FC = () => {
         const data = await response.json();
         blessing = data.blessing;
         targetAngle = data.target_angle;
+        const signature = data.signature;
+
+        if (blessing) {
+          const dataToSign = `${wheel.id}:${blessing.id}:${targetAngle}`;
+          const hmacSecret = import.meta.env.VITE_SERVER_SPIN_SECRET || 'your-secure-hmac-salt-key-here';
+          const isSignatureValid = await verifyHmacSignature(dataToSign, signature, hmacSecret);
+          if (!isSignatureValid) {
+            throw { isServerError: true, message: 'Chữ ký kết quả quay thưởng không hợp lệ (Dữ liệu bị giả mạo).' };
+          }
+        }
         isServerSpunRef.current = true;
       } catch (apiError: unknown) {
         const err = apiError as { isServerError?: boolean; message?: string };
@@ -1050,15 +1271,11 @@ export const ParishionerWheel: React.FC = () => {
 
     const cardContent = (
       <div
-        className="winner-card"
+        className="winner-card glass-card-premium"
         onClick={isModal ? (e) => e.stopPropagation() : undefined}
         style={{
-          background: 'radial-gradient(circle at center, rgba(255, 253, 246, 0.78) 0%, rgba(255, 245, 219, 0.68) 100%)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
           borderRadius: '24px',
           border: wheel.theme_preset === 'christmas' ? '6px double #F59E0B' : `2px solid ${cardBorderColor}`,
-          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.45), 0 0 40px rgba(216, 180, 63, 0.12)',
           padding: '12px',
           display: 'flex',
           flexDirection: 'column',
@@ -1142,28 +1359,29 @@ export const ParishionerWheel: React.FC = () => {
               style={{
                 top: '8px',
                 right: '8px',
-                transform: 'scaleX(-1)',
                 color: cardBorderColor
               }}
               isChristmas={wheel.theme_preset === 'christmas'}
+              flipX={true}
             />
             <CornerOrnamentSVG
               style={{
                 bottom: '8px',
                 left: '8px',
-                transform: 'scaleY(-1)',
                 color: cardBorderColor
               }}
               isChristmas={wheel.theme_preset === 'christmas'}
+              flipY={true}
             />
             <CornerOrnamentSVG
               style={{
                 bottom: '8px',
                 right: '8px',
-                transform: 'scaleX(-1) scaleY(-1)',
                 color: cardBorderColor
               }}
               isChristmas={wheel.theme_preset === 'christmas'}
+              flipX={true}
+              flipY={true}
             />
 
             {/* Cross SVG icon */}
@@ -1629,10 +1847,13 @@ export const ParishionerWheel: React.FC = () => {
         {/* Hidden solid wrapper for html2canvas export */}
         <div
           style={{
-            position: 'absolute',
-            left: '-9999px',
-            top: '-9999px',
-            pointerEvents: 'none'
+            position: 'fixed',
+            left: 0,
+            top: 0,
+            zIndex: -9999,
+            opacity: 0,
+            pointerEvents: 'none',
+            overflow: 'hidden'
           }}
         >
           <div
@@ -1681,28 +1902,29 @@ export const ParishionerWheel: React.FC = () => {
                   style={{
                     top: '8px',
                     right: '8px',
-                    transform: 'scaleX(-1)',
                     color: cardBorderColor
                   }}
                   isChristmas={wheel.theme_preset === 'christmas'}
+                  flipX={true}
                 />
                 <CornerOrnamentSVG
                   style={{
                     bottom: '8px',
                     left: '8px',
-                    transform: 'scaleY(-1)',
                     color: cardBorderColor
                   }}
                   isChristmas={wheel.theme_preset === 'christmas'}
+                  flipY={true}
                 />
                 <CornerOrnamentSVG
                   style={{
                     bottom: '8px',
                     right: '8px',
-                    transform: 'scaleX(-1) scaleY(-1)',
                     color: cardBorderColor
                   }}
                   isChristmas={wheel.theme_preset === 'christmas'}
+                  flipX={true}
+                  flipY={true}
                 />
 
                 <svg
@@ -1953,12 +2175,10 @@ export const ParishionerWheel: React.FC = () => {
         {/* Card phẳng xem lộc */}
         <div style={{ width: '100%', maxWidth: '430px', display: 'flex', justifyContent: 'center' }}>
           <div
-            className="winner-card"
+            className="winner-card glass-card-premium"
             style={{
-              background: 'radial-gradient(circle at center, rgba(255, 253, 246, 0.95) 0%, rgba(255, 245, 219, 0.9) 100%)',
               borderRadius: '24px',
               border: wheel.theme_preset === 'christmas' ? '6px double #F59E0B' : `2px solid ${cardBorderColor}`,
-              boxShadow: '0 24px 64px rgba(0, 0, 0, 0.45)',
               padding: '12px',
               display: 'flex',
               flexDirection: 'column',
@@ -1969,9 +2189,9 @@ export const ParishionerWheel: React.FC = () => {
             <div style={{ border: `1px solid ${cardBorderColor}a0`, borderRadius: '16px', padding: '4px', boxSizing: 'border-box', width: '100%', display: 'flex', flexDirection: 'column' }}>
               <div style={{ border: `1.5px solid ${cardBorderColor}`, borderRadius: '12px', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', position: 'relative', boxSizing: 'border-box', width: '100%', minHeight: '380px', justifyContent: 'center' }}>
                 <CornerOrnamentSVG style={{ top: '8px', left: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
-                <CornerOrnamentSVG style={{ top: '8px', right: '8px', transform: 'scaleX(-1)', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
-                <CornerOrnamentSVG style={{ bottom: '8px', left: '8px', transform: 'scaleY(-1)', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
-                <CornerOrnamentSVG style={{ bottom: '8px', right: '8px', transform: 'scaleX(-1) scaleY(-1)', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
+                <CornerOrnamentSVG style={{ top: '8px', right: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipX={true} />
+                <CornerOrnamentSVG style={{ bottom: '8px', left: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipY={true} />
+                <CornerOrnamentSVG style={{ bottom: '8px', right: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipX={true} flipY={true} />
 
                 <svg viewBox="0 0 24 24" width="40" height="40" style={{ color: cardBorderColor, marginBottom: '12px' }} fill="currentColor">
                   <path d="M12,5 A1.2,1.2 0 1,1 12,2.6 A1.2,1.2 0 1,1 12,5 Z" />
@@ -2069,7 +2289,17 @@ export const ParishionerWheel: React.FC = () => {
             Sao chép chữ
           </button>
           
-          <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', pointerEvents: 'none' }}>
+          <div
+            style={{
+              position: 'fixed',
+              left: 0,
+              top: 0,
+              zIndex: -9999,
+              opacity: 0,
+              pointerEvents: 'none',
+              overflow: 'hidden'
+            }}
+          >
             <div
               ref={exportCardRef}
               className="winner-export-container"
@@ -2086,9 +2316,9 @@ export const ParishionerWheel: React.FC = () => {
               <div style={{ border: `1px solid ${cardBorderColor}a0`, borderRadius: '16px', padding: '4px', boxSizing: 'border-box', width: '100%' }}>
                 <div style={{ border: `1.5px solid ${cardBorderColor}`, borderRadius: '12px', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', position: 'relative', boxSizing: 'border-box', width: '100%', minHeight: '380px', justifyContent: 'center' }}>
                   <CornerOrnamentSVG style={{ top: '8px', left: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
-                  <CornerOrnamentSVG style={{ top: '8px', right: '8px', transform: 'scaleX(-1)', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
-                  <CornerOrnamentSVG style={{ bottom: '8px', left: '8px', transform: 'scaleY(-1)', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
-                  <CornerOrnamentSVG style={{ bottom: '8px', right: '8px', transform: 'scaleX(-1) scaleY(-1)', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
+                  <CornerOrnamentSVG style={{ top: '8px', right: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipX={true} />
+                  <CornerOrnamentSVG style={{ bottom: '8px', left: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipY={true} />
+                  <CornerOrnamentSVG style={{ bottom: '8px', right: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipX={true} flipY={true} />
                   <svg viewBox="0 0 24 24" width="40" height="40" style={{ color: cardBorderColor, marginBottom: '12px' }} fill="currentColor">
                     <path d="M12,5 A1.2,1.2 0 1,1 12,2.6 A1.2,1.2 0 1,1 12,5 Z" />
                     <path d="M5,12 A1.2,1.2 0 1,1 2.6,12 A1.2,1.2 0 1,1 5,12 Z" />
@@ -2156,6 +2386,10 @@ export const ParishionerWheel: React.FC = () => {
   }
 
   const borderGold = wheel.theme_preset === 'christmas' ? '#F59E0B' : getThemeColors(wheel.theme_preset)[1];
+  const spinBtnSize = isSmallScreen ? '68px' : '84px';
+  const spinBtnFontSize = isSmallScreen ? '11px' : '13px';
+  const pointerSize = isSmallScreen ? '36px' : '48px';
+  const pointerRight = isSmallScreen ? '-12px' : '-16px';
 
   return (
     <div
@@ -2189,6 +2423,7 @@ export const ParishionerWheel: React.FC = () => {
       >
         {/* Wheel Card wrapper (Holy Card) */}
         <div
+          className="glass-card-premium"
           style={{
             flex: 1,
             width: isSmallScreen ? 'calc(100% - 24px)' : '100%',
@@ -2198,11 +2433,7 @@ export const ParishionerWheel: React.FC = () => {
             border: wheel.theme_preset === 'christmas' ? '6px double #F59E0B' : `2px solid ${borderGold}`,
             borderRadius: isSmallScreen ? '16px' : '20px',
             padding: isSmallScreen ? '16px' : '24px 20px',
-            background: 'radial-gradient(circle at center, rgba(255, 253, 246, 0.76) 0%, rgba(255, 245, 219, 0.62) 100%)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
             color: 'var(--color-text-dark)',
-            boxShadow: '0 24px 64px rgba(0, 0, 0, 0.65), 0 0 40px rgba(216, 180, 63, 0.15)',
             position: 'relative',
             overflow: 'hidden'
           }}
@@ -2220,28 +2451,29 @@ export const ParishionerWheel: React.FC = () => {
             style={{
               top: isSmallScreen ? '8px' : '12px',
               right: isSmallScreen ? '8px' : '12px',
-              transform: 'scaleX(-1)',
               color: borderGold
             }}
             isChristmas={wheel.theme_preset === 'christmas'}
+            flipX={true}
           />
           <CornerOrnamentSVG
             style={{
               bottom: isSmallScreen ? '8px' : '12px',
               left: isSmallScreen ? '8px' : '12px',
-              transform: 'scaleY(-1)',
               color: borderGold
             }}
             isChristmas={wheel.theme_preset === 'christmas'}
+            flipY={true}
           />
           <CornerOrnamentSVG
             style={{
               bottom: isSmallScreen ? '8px' : '12px',
               right: isSmallScreen ? '8px' : '12px',
-              transform: 'scaleX(-1) scaleY(-1)',
               color: getDarkContrastColor(borderGold, wheel.theme_preset)
             }}
             isChristmas={wheel.theme_preset === 'christmas'}
+            flipX={true}
+            flipY={true}
           />
 
           <header
@@ -2257,9 +2489,11 @@ export const ParishionerWheel: React.FC = () => {
             <div
               className="public-logo"
               style={{
-                background: `linear-gradient(135deg, ${getThemeColors(wheel.theme_preset)[0]} 0%, ${
-                  getThemeColors(wheel.theme_preset)[4]
-                } 100%)`,
+                background: (cachedLogoUrl || parish?.logo_url)
+                  ? 'transparent'
+                  : `linear-gradient(135deg, ${getThemeColors(wheel.theme_preset)[0]} 0%, ${
+                      getThemeColors(wheel.theme_preset)[4]
+                    } 100%)`,
                 color: getTextContrastColor(getThemeColors(wheel.theme_preset)[0], wheel.theme_preset),
                 border: `2px solid ${getDarkContrastColor(getThemeColors(wheel.theme_preset)[1], wheel.theme_preset)}`,
                 boxShadow: '0 4px 12px rgba(15, 61, 46, 0.15)',
@@ -2269,10 +2503,19 @@ export const ParishionerWheel: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: isSmallScreen ? '0px' : '4px'
+                marginBottom: isSmallScreen ? '0px' : '4px',
+                overflow: 'hidden'
               }}
             >
-              <Church size={isSmallScreen ? 20 : 26} />
+              {cachedLogoUrl || parish?.logo_url ? (
+                <img 
+                  src={cachedLogoUrl || parish?.logo_url} 
+                  alt={parish?.name} 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                />
+              ) : (
+                <Church size={isSmallScreen ? 20 : 26} />
+              )}
             </div>
 
             <div
@@ -2338,8 +2581,8 @@ export const ParishionerWheel: React.FC = () => {
               className="wheel-container"
               style={{
                 position: 'relative',
-                width: '440px',
-                height: '440px',
+                width: isSmallScreen ? '330px' : '440px',
+                height: isSmallScreen ? '330px' : '440px',
                 maxWidth: '85vw',
                 maxHeight: '85vw',
                 borderRadius: '50%',
@@ -2347,9 +2590,9 @@ export const ParishionerWheel: React.FC = () => {
                 background: 'rgba(255, 255, 255, 0.92)',
                 backdropFilter: 'blur(8px)',
                 WebkitBackdropFilter: 'blur(8px)',
-                padding: '8px',
+                padding: isSmallScreen ? '4px' : '8px',
                 borderColor: wheel.theme_preset === 'christmas' ? '#F59E0B' : getDarkContrastColor(getThemeColors(wheel.theme_preset)[1], wheel.theme_preset),
-                borderWidth: '8px',
+                borderWidth: isSmallScreen ? '4px' : '8px',
                 borderStyle: 'double'
               }}
             >
@@ -2372,16 +2615,16 @@ export const ParishionerWheel: React.FC = () => {
                 style={{
                   position: 'absolute',
                   top: '50%',
-                  right: '-16px',
+                  right: pointerRight,
                   transform: 'translateY(-50%)',
                   zIndex: 10,
-                  width: '48px',
-                  height: '48px',
+                  width: pointerSize,
+                  height: pointerSize,
                   pointerEvents: 'none'
                 }}
               >
                 {wheel.theme_preset === 'christmas' ? (
-                  <svg viewBox="0 0 40 40" width="48" height="48">
+                  <svg viewBox="0 0 40 40" width={pointerSize} height={pointerSize}>
                     <defs>
                       <linearGradient id="goldMetallicGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#FFEFA6" />
@@ -2402,7 +2645,7 @@ export const ParishionerWheel: React.FC = () => {
                     <circle cx="28" cy="20" r="3" fill="#FFFFFF" style={{ filter: 'drop-shadow(0 0 2px #FFEFA6)' }} />
                   </svg>
                 ) : (
-                  <svg viewBox="0 0 40 40" width="48" height="48">
+                  <svg viewBox="0 0 40 40" width={pointerSize} height={pointerSize}>
                     <defs>
                       <linearGradient id="goldMetallicGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="#FFEFA6" />
@@ -2435,8 +2678,8 @@ export const ParishionerWheel: React.FC = () => {
                     top: '50%',
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
-                    width: '84px',
-                    height: '84px',
+                    width: spinBtnSize,
+                    height: spinBtnSize,
                     borderRadius: '50%',
                     background:
                       wheel.theme_preset === 'christmas'
@@ -2450,7 +2693,7 @@ export const ParishionerWheel: React.FC = () => {
                       wheel.theme_preset === 'christmas'
                         ? '0 0 0 3px #F59E0B, 0 6px 20px rgba(245, 158, 11, 0.4), inset 0 3px 6px rgba(255, 255, 255, 0.8)'
                         : '0 0 0 3px #D8B43F, 0 6px 16px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.6)',
-                    fontSize: '11px',
+                    fontSize: isSmallScreen ? '9px' : '11px',
                     fontWeight: '800',
                     lineHeight: '1.25',
                     cursor: 'pointer',
@@ -2479,8 +2722,8 @@ export const ParishionerWheel: React.FC = () => {
                     top: '50%',
                     left: '50%',
                     transform: 'translate(-50%, -50%)',
-                    width: '84px',
-                    height: '84px',
+                    width: spinBtnSize,
+                    height: spinBtnSize,
                     borderRadius: '50%',
                     background:
                       wheel.theme_preset === 'christmas'
@@ -2494,7 +2737,7 @@ export const ParishionerWheel: React.FC = () => {
                       wheel.theme_preset === 'christmas'
                         ? '0 0 0 3px #F59E0B, 0 6px 20px rgba(245, 158, 11, 0.4), inset 0 3px 6px rgba(255, 255, 255, 0.8)'
                         : '0 0 0 3px #D8B43F, 0 6px 16px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.6)',
-                    fontSize: '13px',
+                    fontSize: spinBtnFontSize,
                     fontWeight: '800',
                     cursor: 'pointer',
                     zIndex: 20,
@@ -2507,7 +2750,7 @@ export const ParishionerWheel: React.FC = () => {
                     transition: 'transform 0.1s ease'
                   }}
                 >
-                  {isSpinning ? 'ĐANG QUAY' : 'QUAY LỘC'}
+                  {isSpinning ? (isSmallScreen ? 'QUAY...' : 'ĐANG QUAY') : 'QUAY LỘC'}
                 </button>
               )}
             </div>
@@ -2554,16 +2797,41 @@ export const ParishionerWheel: React.FC = () => {
       {!isAdClosed && (
         <div className="footer-ad-banner" style={{ borderTopColor: getThemeColors(wheel.theme_preset)[1] }}>
           <div className="ad-content">
-            <span className="ad-logo-badge">Giờ Cha Chờ</span>
+            <img 
+              src="/logo-giochacho.webp" 
+              alt="Giờ Cha Chờ" 
+              style={{ 
+                width: '28px', 
+                height: '28px', 
+                borderRadius: '6px', 
+                objectFit: 'contain',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                flexShrink: 0
+              }} 
+            />
             <span className="ad-text">Đồng hành cùng đức tin Công giáo. Tìm nhanh giờ Thánh Lễ & Giờ Xưng Tội gần nhất.</span>
-            <a
-              href="https://play.google.com/store/apps/details?id=com.anonymous.churchfindernative"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ad-link-btn"
-            >
-              Tải miễn phí
-            </a>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+              <a
+                href="https://apps.apple.com/vn/app/gi%E1%BB%9D-cha-ch%E1%BB%9D/id6760563537"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ad-link-btn"
+                style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--color-gold)', textDecoration: 'none', borderBottom: '1px solid var(--color-gold)', whiteSpace: 'nowrap' }}
+              >
+                Tải iOS
+              </a>
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px' }}>|</span>
+              <a
+                href="https://play.google.com/store/apps/details?id=com.anonymous.churchfindernative&pcampaignid=web_share"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ad-link-btn"
+                style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--color-gold)', textDecoration: 'none', borderBottom: '1px solid var(--color-gold)', whiteSpace: 'nowrap' }}
+              >
+                Tải Android
+              </a>
+            </div>
             <button onClick={() => setIsAdClosed(true)} className="ad-close-btn" title="Đóng quảng cáo">
               <X size={14} />
             </button>

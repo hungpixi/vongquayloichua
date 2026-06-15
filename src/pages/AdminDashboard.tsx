@@ -22,11 +22,10 @@ import {
   Edit,
   Search,
   Download,
-  Check,
-  AlertCircle,
   MapPin,
   Phone,
-  Calendar
+  Calendar,
+  Upload
 } from 'lucide-react';
 import {
   DEFAULT_BLESSINGS,
@@ -114,7 +113,6 @@ export const AdminDashboard: React.FC = () => {
 
   // Realtime slug checking states
   const [slugIsUnique, setSlugIsUnique] = useState<boolean | null>(null);
-  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
 
   // Mass Schedule widget states
   interface MassScheduleItem {
@@ -454,7 +452,10 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const fetchDashboardData = React.useCallback(async () => {
-    if (!parish) return;
+    if (!parish) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -507,6 +508,13 @@ export const AdminDashboard: React.FC = () => {
   }, [user, navigate, fetchDashboardData]);
 
   const fetchInviteCode = async () => {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || !supabase;
+    if (isLocal) {
+      setInviteCode('vqlc2026');
+      setInviteIsStatic(true);
+      return;
+    }
+
     try {
       setInviteLoading(true);
       let token = '';
@@ -521,13 +529,6 @@ export const AdminDashboard: React.FC = () => {
         }
       });
 
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      if (response.status === 404 && isLocal) {
-        setInviteCode('vqlc2026');
-        setInviteIsStatic(true);
-        return;
-      }
-
       const data = await response.json();
       if (data.success) {
         setInviteCode(data.code);
@@ -538,11 +539,6 @@ export const AdminDashboard: React.FC = () => {
       }
     } catch (err) {
       console.error('Lỗi lấy mã mời:', err);
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      if (isLocal) {
-        setInviteCode('vqlc2026');
-        setInviteIsStatic(true);
-      }
     } finally {
       setInviteLoading(false);
     }
@@ -550,14 +546,14 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      fetchInviteCode();
+      Promise.resolve().then(() => fetchInviteCode());
     }
   }, [user]);
 
   useEffect(() => {
     if (inviteRemaining <= 0) {
       if (user && inviteCode) {
-        fetchInviteCode();
+        Promise.resolve().then(() => fetchInviteCode());
       }
       return;
     }
@@ -609,14 +605,11 @@ export const AdminDashboard: React.FC = () => {
     }
 
     const checkUnique = async () => {
-      setIsCheckingSlug(true);
       try {
         const isUnique = await dbService.checkParishSlugUnique(parishSlug, parish.id);
         setSlugIsUnique(isUnique);
       } catch (err) {
         console.error('Lỗi check slug:', err);
-      } finally {
-        setIsCheckingSlug(false);
       }
     };
 
@@ -818,6 +811,42 @@ export const AdminDashboard: React.FC = () => {
     } finally {
       setParishSaveLoading(false);
     }
+  };
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Dung lượng ảnh logo quá lớn! Vui lòng chọn ảnh dưới 2MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setParishLogo(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleBackgroundFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 3 * 1024 * 1024) {
+      alert('Dung lượng ảnh nền quá lớn! Vui lòng chọn ảnh dưới 3MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setParishBackground(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   // Mass Schedule widget handlers
@@ -1087,7 +1116,7 @@ export const AdminDashboard: React.FC = () => {
             margin: '16px 16px 8px 16px',
             padding: '16px',
             borderRadius: '12px',
-            background: 'rgba(216, 180, 63, 0.04)',
+            background: 'rgba(255, 255, 255, 0.06)',
             border: '2px double var(--color-gold)',
             display: 'flex',
             flexDirection: 'column',
@@ -1104,7 +1133,7 @@ export const AdminDashboard: React.FC = () => {
             <div style={{ 
               fontSize: '11px', 
               fontWeight: '700', 
-              color: 'var(--color-primary)', 
+              color: 'rgba(255, 255, 255, 0.9)', 
               letterSpacing: '0.5px', 
               textTransform: 'uppercase', 
               display: 'flex', 
@@ -1116,7 +1145,8 @@ export const AdminDashboard: React.FC = () => {
                 width: '6px', 
                 height: '6px', 
                 borderRadius: '50%', 
-                backgroundColor: '#10B981'
+                backgroundColor: '#10B981',
+                boxShadow: '0 0 8px #10B981'
               }}></span>
               {inviteIsStatic ? 'Mã mời Giáo xứ (Cố định)' : 'Mã mời 2FA (15 Phút)'}
             </div>
@@ -1125,7 +1155,7 @@ export const AdminDashboard: React.FC = () => {
               {inviteLoading && !inviteCode ? (
                 <Loader className="animate-spin" size={20} style={{ color: 'var(--color-gold)' }} />
               ) : (
-                <span style={{ fontSize: '20px', fontFamily: 'monospace', fontWeight: '800', color: 'var(--color-primary)', letterSpacing: '1px' }}>
+                <span style={{ fontSize: '22px', fontFamily: 'monospace', fontWeight: '800', color: 'var(--color-gold)', letterSpacing: '1.5px', textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
                   {inviteCode || '------'}
                 </span>
               )}
@@ -1137,18 +1167,26 @@ export const AdminDashboard: React.FC = () => {
                     showToastMsg('Đã sao chép mã mời!');
                   }}
                   style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--color-primary-soft)',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: 'var(--color-gold)',
                     cursor: 'pointer',
-                    padding: '4px',
+                    padding: '5px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    borderRadius: '4px',
-                    transition: 'background 0.2s'
+                    borderRadius: '6px',
+                    transition: 'all 0.2s'
                   }}
                   title="Sao chép mã mời"
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                    e.currentTarget.style.color = '#FFFFFF';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.color = 'var(--color-gold)';
+                  }}
                 >
                   <Clipboard size={13} />
                 </button>
@@ -1156,7 +1194,7 @@ export const AdminDashboard: React.FC = () => {
             </div>
 
             {!inviteIsStatic && (
-              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+              <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.7)', fontStyle: 'italic' }}>
                 {inviteRemaining > 0 ? (
                   <span>Đổi mã mới sau {Math.floor(inviteRemaining / 60)}:{(inviteRemaining % 60).toString().padStart(2, '0')}</span>
                 ) : (
@@ -1377,85 +1415,191 @@ export const AdminDashboard: React.FC = () => {
 
                 <form onSubmit={handleUpdateParish} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   {/* Basic Information section */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }} className="mobile-one-col">
-                    <div className="form-group">
-                      <label htmlFor="parish-name" style={{ color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '6px', fontSize: '13.5px' }}>Tên Giáo Xứ</label>
-                      <input
-                        id="parish-name"
-                        type="text"
-                        className="form-control"
-                        placeholder="Ví dụ: Giáo xứ Kẻ Sặt"
-                        value={parishName}
-                        onChange={(e) => setParishName(e.target.value)}
-                        required
-                        style={{ height: '42px', border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '8px', width: '100%', padding: '0 12px' }}
-                      />
-                    </div>
+                  <div className="form-group">
+                    <label htmlFor="parish-name" style={{ color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '6px', fontSize: '13.5px' }}>Tên Giáo Xứ</label>
+                    <input
+                      id="parish-name"
+                      type="text"
+                      className="form-control"
+                      placeholder="Ví dụ: Giáo xứ Kẻ Sặt"
+                      value={parishName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setParishName(val);
+                        const clean = val
+                          .toLowerCase()
+                          .normalize('NFD')
+                          .replace(/[\u0300-\u036f]/g, '')
+                          .replace(/[đĐ]/g, 'd')
+                          .replace(/[^a-z0-9\s-]/g, '')
+                          .trim()
+                          .replace(/\s+/g, '-');
+                        setParishSlug(clean);
+                      }}
+                      required
+                      style={{ height: '42px', border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '8px', width: '100%', padding: '0 12px' }}
+                    />
+                    {slugIsUnique === false && (
+                      <span style={{ fontSize: '11.5px', color: '#EF4444', fontWeight: '600', marginTop: '6px', display: 'block' }}>
+                        ⚠️ Tên Giáo xứ này tạo ra đường dẫn đã tồn tại. Vui lòng thay đổi tên hoặc thêm ký tự khác.
+                      </span>
+                    )}
+                  </div>
 
-                    <div className="form-group">
-                      <label htmlFor="parish-slug" style={{ color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '6px', fontSize: '13.5px' }}>Đường dẫn Giáo Xứ (Slug URL)</label>
-                      <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-                        <span style={{ background: 'rgba(15, 61, 46, 0.06)', padding: '0 12px', height: '42px', display: 'flex', alignItems: 'center', border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRight: 'none', borderRadius: '8px 0 0 8px', fontSize: '13px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                          /giao-xu/
-                        </span>
-                        <input
-                          id="parish-slug"
-                          type="text"
-                          className="form-control"
-                          value={parishSlug}
-                          onChange={(e) => setParishSlug(e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''))}
-                          required
-                          style={{ height: '42px', border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '0 8px 8px 0', width: '100%', padding: '0 12px', paddingRight: '36px' }}
-                        />
-                        <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
-                          {isCheckingSlug ? (
-                            <Loader size={16} className="animate-spin text-muted" />
-                          ) : slugIsUnique === true ? (
-                            <Check size={18} className="text-success" style={{ color: '#10B981' }} />
-                          ) : slugIsUnique === false ? (
-                            <AlertCircle size={18} className="text-error" style={{ color: '#EF4444' }} />
-                          ) : null}
-                        </div>
-                      </div>
-                      <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        {slugIsUnique === true && (
-                          <span style={{ fontSize: '11px', color: '#10B981', fontWeight: '500' }}>🟢 Đường dẫn hợp lệ, chưa ai sử dụng!</span>
-                        )}
-                        {slugIsUnique === false && (
-                          <span style={{ fontSize: '11px', color: '#EF4444', fontWeight: '500' }}>🔴 Đường dẫn này đã được Giáo xứ khác sử dụng!</span>
-                        )}
-                      </div>
-                    </div>
+                  <div className="form-group" style={{ display: 'none' }}>
+                    <input
+                      id="parish-slug"
+                      type="hidden"
+                      value={parishSlug}
+                    />
                   </div>
 
                   {/* Logo & Background section */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }} className="mobile-one-col">
                     <div className="form-group">
-                      <label htmlFor="parish-logo" style={{ color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '6px', fontSize: '13.5px' }}>Liên kết ảnh Logo Giáo xứ</label>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <input
-                          id="parish-logo"
-                          type="url"
-                          className="form-control"
-                          placeholder="https://example.com/logo.png"
-                          value={parishLogo}
-                          onChange={(e) => setParishLogo(e.target.value)}
-                          style={{ height: '42px', border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '8px', flex: 1, padding: '0 12px' }}
-                        />
+                      <label style={{ color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '8px', fontSize: '13.5px' }}>Logo Giáo xứ</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(15, 61, 46, 0.02)', border: '1.5px dashed rgba(15, 61, 46, 0.15)', borderRadius: '12px', padding: '12px', minHeight: '90px' }}>
+                        {parishLogo ? (
+                          <div style={{ position: 'relative', width: '64px', height: '64px', flexShrink: 0 }}>
+                            <img
+                              src={parishLogo}
+                              alt="Logo Giáo xứ"
+                              style={{ width: '64px', height: '64px', borderRadius: '12px', objectFit: 'cover', border: '1px solid rgba(15, 61, 46, 0.1)' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setParishLogo('')}
+                              style={{
+                                position: 'absolute',
+                                top: '-6px',
+                                right: '-6px',
+                                background: '#EF4444',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '18px',
+                                height: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                              }}
+                              title="Xóa ảnh logo"
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ width: '64px', height: '64px', borderRadius: '12px', border: '1px dashed rgba(15, 61, 46, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFFFFF', color: 'var(--color-text-muted)', fontSize: '11px', textAlign: 'center', padding: '4px', flexShrink: 0 }}>
+                            Chưa có logo
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <label
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 14px',
+                              background: '#FFFFFF',
+                              border: '1.5px solid rgba(15, 61, 46, 0.2)',
+                              borderRadius: '8px',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              color: 'var(--color-primary)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              boxShadow: '0 2px 4px rgba(15, 61, 46, 0.02)'
+                            }}
+                          >
+                            <Upload size={14} className="text-gold" />
+                            Tải logo lên
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleLogoFileChange}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                            Tối đa 2MB (Nên dùng PNG trong suốt)
+                          </div>
+                        </div>
                       </div>
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="parish-bg" style={{ color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '6px', fontSize: '13.5px' }}>Liên kết ảnh Nền Vòng Quay (Background URL)</label>
-                      <input
-                        id="parish-bg"
-                        type="url"
-                        className="form-control"
-                        placeholder="https://example.com/background.jpg"
-                        value={parishBackground}
-                        onChange={(e) => setParishBackground(e.target.value)}
-                        style={{ height: '42px', border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '8px', width: '100%', padding: '0 12px' }}
-                      />
+                      <label style={{ color: 'var(--color-primary)', fontWeight: '600', display: 'block', marginBottom: '8px', fontSize: '13.5px' }}>Ảnh Nền Vòng Quay (Background)</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(15, 61, 46, 0.02)', border: '1.5px dashed rgba(15, 61, 46, 0.15)', borderRadius: '12px', padding: '12px', minHeight: '90px' }}>
+                        {parishBackground ? (
+                          <div style={{ position: 'relative', width: '100px', height: '64px', flexShrink: 0 }}>
+                            <img
+                              src={parishBackground}
+                              alt="Ảnh nền"
+                              style={{ width: '100px', height: '64px', borderRadius: '12px', objectFit: 'cover', border: '1px solid rgba(15, 61, 46, 0.1)' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setParishBackground('')}
+                              style={{
+                                position: 'absolute',
+                                top: '-6px',
+                                right: '-6px',
+                                background: '#EF4444',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '18px',
+                                height: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                              }}
+                              title="Xóa ảnh nền"
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ width: '100px', height: '64px', borderRadius: '12px', border: '1px dashed rgba(15, 61, 46, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFFFFF', color: 'var(--color-text-muted)', fontSize: '11px', textAlign: 'center', padding: '4px', flexShrink: 0 }}>
+                            Dùng nền mặc định
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <label
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 14px',
+                              background: '#FFFFFF',
+                              border: '1.5px solid rgba(15, 61, 46, 0.2)',
+                              borderRadius: '8px',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              color: 'var(--color-primary)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              boxShadow: '0 2px 4px rgba(15, 61, 46, 0.02)'
+                            }}
+                          >
+                            <Upload size={14} className="text-gold" />
+                            Tải ảnh nền lên
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleBackgroundFileChange}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                            Tối đa 3MB (Khuyên dùng 1920x1080)
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1546,7 +1690,7 @@ export const AdminDashboard: React.FC = () => {
                   </div>
 
                   {/* Mass Schedule Widget Section */}
-                  <div className="form-group" style={{ borderTop: '1px solid rgba(15, 61, 46, 0.08)', paddingTop: '20px' }}>
+                  <div className="form-group" style={{ display: 'none' }}>
                     <label style={{ color: 'var(--color-primary)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '15px' }}>
                       <Calendar size={18} className="text-gold" />
                       Widget Bảng Giờ Lễ Giáo Xứ

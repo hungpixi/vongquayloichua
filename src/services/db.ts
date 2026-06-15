@@ -100,11 +100,14 @@ const STORE_NAME = 'custom_bgms';
 
 const getIDBStore = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(INDEXEDDB_NAME, 1);
+    const request = indexedDB.open(INDEXEDDB_NAME, 2);
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME);
+      }
+      if (!db.objectStoreNames.contains('asset_cache')) {
+        db.createObjectStore('asset_cache');
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -300,6 +303,16 @@ const setLocalData = <T>(key: string, data: T[]) => {
   localStorage.setItem(key, JSON.stringify(data));
 };
 
+const mapDBWheelToWheel = (dbw: Record<string, unknown> | Wheel | null | undefined): Wheel => {
+  if (!dbw) return dbw as unknown as Wheel;
+  const { config, is_active, ...rest } = dbw as Record<string, unknown>;
+  return {
+    ...(rest as unknown as Wheel),
+    ...((config as Record<string, unknown>) || {}),
+    is_active: is_active as boolean
+  } as Wheel;
+};
+
 // DATABASE SERVICE
 export const dbService = {
   // --- AUTH OPERATIONS ---
@@ -384,10 +397,77 @@ export const dbService = {
       return data.user;
     } else {
       const users = getLocalData<LocalUser>('local_users');
-      const user = users.find(u => u.email === email);
+      const cleanEmail = email.trim().toLowerCase();
+      let user = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
+      
+      // Auto-register mock local user if they don't exist yet
       if (!user) {
-        throw new Error('Email hoặc mật khẩu không chính xác.');
+        const isDevAdmin = cleanEmail === 'devadmin';
+        const newUser: LocalUser = { 
+          id: isDevAdmin ? 'local-devadmin-user-id' : generateUUID(), 
+          email: cleanEmail
+        };
+        user = newUser;
+        users.push(newUser);
+        setLocalData<LocalUser>('local_users', users);
+        
+        // Seed default parish and default wheel for this new local user
+        const parishes = getLocalData<Parish>('local_parishes');
+        const hasParish = parishes.some(p => p.owner_id === newUser.id);
+        if (!hasParish) {
+          const parishId = isDevAdmin ? 'local-devadmin-parish-id' : generateUUID();
+          const slug = isDevAdmin ? 'giao-xu-demo' : 'giao-xu-' + cleanEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
+          const mockParish: Parish = {
+            id: parishId,
+            owner_id: newUser.id,
+            name: isDevAdmin ? 'Giáo xứ Demo' : `Giáo xứ của ${cleanEmail.split('@')[0]}`,
+            slug,
+            address: '123 Đường Hòa Bình, Phường 1, Quận 11, TP. HCM',
+            phone: '0123456789',
+            created_at: new Date().toISOString()
+          };
+          parishes.push(mockParish);
+          setLocalData<Parish>('local_parishes', parishes);
+
+          // Seed default wheel
+          const wheels = getLocalData<Wheel>('local_wheels');
+          const wheelId = isDevAdmin ? 'local-devadmin-wheel-id' : generateUUID();
+          const mockWheel: Wheel = {
+            id: wheelId,
+            parish_id: parishId,
+            title: 'Bảy Ơn Chúa Thánh Thần',
+            slug: 'bay-on-thanh-than',
+            description: 'Nguyện xin bảy ơn Chúa Thánh Thần tuôn đổ tràn trề trên anh chị em.',
+            theme_preset: 'gold',
+            enable_confetti: true,
+            enable_sound: true,
+            lock_duration: '24h',
+            created_at: new Date().toISOString(),
+            display_slots: 12,
+            slot_display_type: 'mixed',
+            card_template: 'default',
+            card_font_size: '16',
+            card_greeting: 'Nguyện xin Lời Chúa là nguồn sức mạnh của bạn!'
+          };
+          wheels.push(mockWheel);
+          setLocalData<Wheel>('local_wheels', wheels);
+
+          // Seed blessings
+          const blessings = getLocalData<Blessing>('local_blessings');
+          const mockBlessings: Blessing[] = [
+            { id: generateUUID(), wheel_id: wheelId, category: 'Ơn khôn ngoan', quote: 'Is 11,2', text: 'Thần khí Khôn Ngoan giúp anh/chị nhìn nhận mọi sự theo ý định yêu thương của Chúa.', is_custom: false },
+            { id: generateUUID(), wheel_id: wheelId, category: 'Ơn thông minh', quote: 'Is 11,2', text: 'Thần khí Thông Minh giúp anh/chị thấu hiểu sâu sắc các mầu nhiệm đức tin trong cuộc sống.', is_custom: false },
+            { id: generateUUID(), wheel_id: wheelId, category: 'Ơn hiểu biết', quote: 'Is 11,2', text: 'Thần khí Hiểu Biết giúp anh/chị nhận ra sự hiện diện kì diệu của Thiên Chúa qua thiên nhiên và tha nhân.', is_custom: false },
+            { id: generateUUID(), wheel_id: wheelId, category: 'Ơn lo liệu', quote: 'Is 11,2', text: 'Thần khí Lo Liệu định hướng để anh/chị luôn đưa ra các quyết định sáng suốt và đúng đắn.', is_custom: false },
+            { id: generateUUID(), wheel_id: wheelId, category: 'Ơn sức mạnh', quote: 'Is 11,2', text: 'Thần khí Sức Mạnh ban lòng can đảm giúp anh/chị vượt qua gian nan thử thách để sống chứng tá cho Tin Mừng.', is_custom: false },
+            { id: generateUUID(), wheel_id: wheelId, category: 'Ơn đạo đức', quote: 'Is 11,2', text: 'Thần khí Đạo Đức thắp sáng tình yêu mến thiết tha của anh/chị đối với Thiên Chúa và lòng bao dung đối với anh em.', is_custom: false },
+            { id: generateUUID(), wheel_id: wheelId, category: 'Ơn kính sợ Chúa', quote: 'Is 11,2', text: 'Thần khí Kính Sợ giúp anh/chị luôn sống khiêm nhường, kính tôn uy danh Thiên Chúa và xa lánh tội lỗi.', is_custom: false }
+          ];
+          blessings.push(...mockBlessings);
+          setLocalData<Blessing>('local_blessings', blessings);
+        }
       }
+      
       localStorage.setItem('local_active_user', JSON.stringify(user));
       return user;
     }
@@ -704,10 +784,10 @@ export const dbService = {
         .eq('is_active', true)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data || []).map(mapDBWheelToWheel);
     } else {
       const wheels = getLocalData<Wheel>('local_wheels');
-      return wheels.filter(w => w.parish_id === parishId && !w.deleted_at);
+      return wheels.filter(w => w.parish_id === parishId && !w.deleted_at).map(mapDBWheelToWheel);
     }
   },
 
@@ -720,14 +800,14 @@ export const dbService = {
         .from('wheels')
         .select('*')
         .eq('parish_id', parish.id)
-        .eq('slug', wheelSlug)
+        .eq('config->>slug', wheelSlug)
         .eq('is_active', true)
         .maybeSingle();
 
       if (error) throw error;
       if (!data) return null;
 
-      return { parish, wheel: data };
+      return { parish, wheel: mapDBWheelToWheel(data) };
     } else {
       const parish = await this.getParishBySlug(parishSlug);
       if (!parish) return null;
@@ -736,7 +816,7 @@ export const dbService = {
       const wheel = wheels.find(w => w.parish_id === parish.id && w.slug === wheelSlug && !w.deleted_at);
       if (!wheel) return null;
 
-      return { parish, wheel };
+      return { parish, wheel: mapDBWheelToWheel(wheel) };
     }
   },
 
@@ -753,7 +833,7 @@ export const dbService = {
       if (!data) return null;
 
       const { parishes, ...wheel } = data;
-      return { parish: parishes, wheel };
+      return { parish: parishes, wheel: mapDBWheelToWheel(wheel) };
     } else {
       const wheels = getLocalData<Wheel>('local_wheels');
       const wheel = wheels.find(w => w.id === wheelId && !w.deleted_at);
@@ -763,7 +843,7 @@ export const dbService = {
       const parish = parishes.find(p => p.id === wheel.parish_id);
       if (!parish) return null;
 
-      return { parish, wheel };
+      return { parish, wheel: mapDBWheelToWheel(wheel) };
     }
   },
 
@@ -801,22 +881,43 @@ export const dbService = {
     };
 
     if (isOnline()) {
-      const { data, error } = await supabase!
-        .from('wheels')
-        .insert({
-          parish_id: parishId,
-          title,
-          slug,
-          description,
-          theme_preset: themePreset,
-          lock_duration: '24h',
-          ...audioDefaults,
-          ...extraFields
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+       const configKeys = [
+         'slug', 'description', 'theme_preset', 'enable_confetti', 'enable_sound',
+         'background_url', 'address', 'phone', 'facebook_url', 'youtube_url',
+         'mass_schedule', 'greeting', 'bgm_enabled', 'bgm_type', 'bgm_volume',
+         'spin_sfx_type', 'win_sfx_type', 'custom_bgm_url', 'custom_win_sfx_url',
+         'display_slots', 'slot_display_type', 'card_template', 'card_text_color',
+         'card_font_size', 'card_greeting'
+       ];
+       const config: Record<string, unknown> = {
+         enable_confetti: true,
+         enable_sound: true
+       };
+       const columns: Record<string, unknown> = {
+         parish_id: parishId,
+         title,
+         lock_duration: '24h',
+         is_active: true
+       };
+       // populate config
+       for (const key of configKeys) {
+         if ((audioDefaults as Record<string, unknown>)[key] !== undefined) config[key] = (audioDefaults as Record<string, unknown>)[key];
+         if (extraFields && (extraFields as Record<string, unknown>)[key] !== undefined) config[key] = (extraFields as Record<string, unknown>)[key];
+       }
+       config.slug = slug;
+       config.description = description;
+       config.theme_preset = themePreset;
+
+       const { data, error } = await supabase!
+         .from('wheels')
+         .insert({
+           ...columns,
+           config
+         })
+         .select()
+         .single();
+       if (error) throw error;
+       return mapDBWheelToWheel(data);
     } else {
       const wheels = getLocalData<Wheel>('local_wheels');
       // check unique in parish
@@ -840,17 +941,52 @@ export const dbService = {
       };
       wheels.push(mockWheel);
       setLocalData<Wheel>('local_wheels', wheels);
-      return mockWheel;
+      return mapDBWheelToWheel(mockWheel);
     }
   },
 
   async updateWheel(wheelId: string, fields: Partial<Omit<Wheel, 'id' | 'parish_id'>>) {
     if (isOnline()) {
-      const { error } = await supabase!
-        .from('wheels')
-        .update({ ...fields, updated_at: new Date().toISOString() })
-        .eq('id', wheelId);
-      if (error) throw error;
+       const { data: current, error: fetchErr } = await supabase!
+         .from('wheels')
+         .select('*')
+         .eq('id', wheelId)
+         .maybeSingle();
+       if (fetchErr) throw fetchErr;
+       if (!current) throw new Error('Không tìm thấy vòng quay cần cập nhật.');
+
+       const existingConfig = current.config || {};
+       const columnsPayload: Record<string, unknown> = {
+         updated_at: new Date().toISOString()
+       };
+       if (fields.title !== undefined) columnsPayload.title = fields.title;
+       if (fields.lock_duration !== undefined) columnsPayload.lock_duration = fields.lock_duration;
+       if (fields.is_active !== undefined) columnsPayload.is_active = fields.is_active;
+
+       const configKeys = [
+         'slug', 'description', 'theme_preset', 'enable_confetti', 'enable_sound',
+         'background_url', 'address', 'phone', 'facebook_url', 'youtube_url',
+         'mass_schedule', 'greeting', 'bgm_enabled', 'bgm_type', 'bgm_volume',
+         'spin_sfx_type', 'win_sfx_type', 'custom_bgm_url', 'custom_win_sfx_url',
+         'display_slots', 'slot_display_type', 'card_template', 'card_text_color',
+         'card_font_size', 'card_greeting'
+       ];
+
+       const newConfig = { ...existingConfig };
+       for (const key of configKeys) {
+         if ((fields as Record<string, unknown>)[key] !== undefined) {
+           newConfig[key] = (fields as Record<string, unknown>)[key];
+         }
+       }
+
+       const { error } = await supabase!
+         .from('wheels')
+         .update({
+           ...columnsPayload,
+           config: newConfig
+         })
+         .eq('id', wheelId);
+       if (error) throw error;
     } else {
       const wheels = getLocalData<Wheel>('local_wheels');
       const idx = wheels.findIndex(w => w.id === wheelId);
@@ -879,7 +1015,7 @@ export const dbService = {
         .from('wheels')
         .select('id')
         .eq('parish_id', parishId)
-        .eq('slug', slug)
+        .eq('config->>slug', slug)
         .eq('is_active', true);
       if (excludeId) {
         query = query.neq('id', excludeId);
@@ -1389,8 +1525,50 @@ export const dbService = {
     });
   },
 
+  // Asset Cache Operations (BGM, background images, logo images)
+  async getCachedAssetUrl(url: string): Promise<string> {
+    if (!url || url.startsWith('blob:') || url.startsWith('data:') || url.startsWith('indexeddb:')) {
+      return url;
+    }
+    try {
+      const db = await getIDBStore();
+      const blob = await new Promise<Blob | null>((resolve, reject) => {
+        const tx = db.transaction('asset_cache', 'readonly');
+        const store = tx.objectStore('asset_cache');
+        const request = store.get(url);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      });
+
+      if (blob) {
+        return URL.createObjectURL(blob);
+      }
+
+      // If not cached, fetch and cache it
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch asset: ${response.statusText}`);
+      }
+      const fetchedBlob = await response.blob();
+      
+      // Save to IndexedDB
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('asset_cache', 'readwrite');
+        const store = tx.objectStore('asset_cache');
+        const request = store.put(fetchedBlob, url);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+
+      return URL.createObjectURL(fetchedBlob);
+    } catch (err) {
+      console.warn(`Asset cache failed for ${url}, falling back to original:`, err);
+      return url;
+    }
+  },
+
   async syncOfflineActions() {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (!supabase || (typeof navigator !== 'undefined' && !navigator.onLine)) {
       return;
     }
 

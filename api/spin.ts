@@ -73,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // 3. Parse and validate input body
-    const { wheel_id, fingerprint, name, group } = (req.body || {}) as Record<string, string>;
+    const { wheel_id, fingerprint, session_id, name, group, blessing_id, item_spun, created_at, offline_sync } = (req.body || {}) as Record<string, unknown>;
 
     if (!wheel_id) {
       return res.status(400).json({ error: 'Missing wheel_id parameter' });
@@ -117,24 +117,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
-    // 5.b Verify authenticated Supabase user (session token is mandatory)
+    // 5.b Verify authenticated Supabase user (session token is optional)
     const authHeader = req.headers['authorization'] as string || '';
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized: Missing or invalid Authorization header' });
-    }
-
-    const sessionToken = authHeader.substring(7);
     let userId = '';
 
-    try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser(sessionToken);
-      if (userError || !user) {
-        return res.status(401).json({ error: 'Unauthorized: Invalid session token' });
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const sessionToken = authHeader.substring(7);
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser(sessionToken);
+        if (user && !userError) {
+          userId = user.id;
+        }
+      } catch (err) {
+        console.warn('Supabase session token verification failed (ignored for optional auth):', err);
       }
-      userId = user.id;
-    } catch (err) {
-      console.error('Supabase session token verification failed:', err);
-      return res.status(401).json({ error: 'Unauthorized: Token verification failed' });
+    }
+
+    // 5.c Handle offline sync bypass
+    if (offline_sync) {
+      if (!blessing_id || !item_spun) {
+        return res.status(400).json({ error: 'Missing blessing_id or item_spun for offline sync' });
+      }
+      const spinRecord = {
+        wheel_id,
+        blessing_id,
+        item_spun,
+        session_id: session_id || userId || fingerprint,
+        ip_address: ip,
+        parishioner_name: name || 'Ẩn danh',
+        parishioner_group: group || '',
+        created_at: created_at || new Date().toISOString(),
+      };
+
+      if (redisUrl && redisToken) {
+        try {
+          const redisResponse = await fetch(redisUrl, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${redisToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify([['LPUSH', 'spin_queue', JSON.stringify(spinRecord)]]),
+          });
+          if (!redisResponse.ok) {
+            console.error('Failed to push offline spin record to Redis:', await redisResponse.text());
+          }
+        } catch (redisErr) {
+          console.error('Redis operation failed during offline sync:', redisErr);
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from('spin_history')
+          .insert(spinRecord);
+        if (insertError) {
+          console.error('Direct Supabase insert failed during offline sync:', insertError);
+        }
+      }
+
+      return res.status(200).json({ success: true, message: 'Offline spin synchronized successfully' });
     }
 
     // 6. Fetch the wheel configuration to check lock_duration and display_slots
@@ -152,37 +192,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const lockDuration = wheel.lock_duration || '24h';
     const isLockActive = lockDuration !== 'none';
 
+    // Parse lock duration dynamically
+    let sinceDate: Date | null = null;
+    let redisTtl = 86400; // default 24h in seconds
+    if (isLockActive) {
+      if (lockDuration === 'forever') {
+        redisTtl = 31536000; // 1 year
+      } else {
+        const match = lockDuration.match(/^(\d+)([hmds])$/i);
+        let ms = 24 * 60 * 60 * 1000;
+        if (match) {
+          const value = parseInt(match[1], 10);
+          const unit = match[2].toLowerCase();
+          if (unit === 'h') {
+            ms = value * 60 * 60 * 1000;
+            redisTtl = value * 60 * 60;
+          } else if (unit === 'm') {
+            ms = value * 60 * 1000;
+            redisTtl = value * 60;
+          } else if (unit === 'd') {
+            ms = value * 24 * 60 * 60 * 1000;
+            redisTtl = value * 24 * 60 * 60;
+          } else if (unit === 's') {
+            ms = value * 1000;
+            redisTtl = value;
+          }
+        }
+        sinceDate = new Date(Date.now() - ms);
+      }
+    }
+
     // 7. Server checks lock duration / rate limiting if lock is active
     if (isLockActive) {
-      // 7.a Check Upstash Redis on 3 vectors: fingerprint, IP, and userId
+      // 7.a Check Upstash Redis on 3 vectors: fingerprint, IP, and session_id
       let isRedisLocked = false;
       if (redisUrl && redisToken) {
         try {
-          const redisCheckKeys = [
-            ['GET', `spin_lock:${wheel_id}:${fingerprint}`],
-            ['GET', `spin_lock:${wheel_id}:${ip}`],
-          ];
-          if (userId) {
-            redisCheckKeys.push(['GET', `spin_lock:${wheel_id}:${userId}`]);
-          }
+          const redisCheckKeys: string[][] = [];
+          if (fingerprint) redisCheckKeys.push(['GET', `spin_lock:${wheel_id}:${fingerprint}`]);
+          if (ip) redisCheckKeys.push(['GET', `spin_lock:${wheel_id}:${ip}`]);
+          if (session_id) redisCheckKeys.push(['GET', `spin_lock:${wheel_id}:${session_id}`]);
+          if (userId) redisCheckKeys.push(['GET', `spin_lock:${wheel_id}:${userId}`]);
 
-          const checkResponse = await fetch(redisUrl, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${redisToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(redisCheckKeys),
-          });
+          if (redisCheckKeys.length > 0) {
+            const checkResponse = await fetch(redisUrl, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${redisToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(redisCheckKeys),
+            });
 
-          if (checkResponse.ok) {
-            const checkResults = await checkResponse.json();
-            if (Array.isArray(checkResults)) {
-              for (const r of checkResults) {
-                const val = typeof r === 'object' && r !== null ? r.result : r;
-                if (val !== null && val !== undefined && val !== '') {
-                  isRedisLocked = true;
-                  break;
+            if (checkResponse.ok) {
+              const checkResults = await checkResponse.json();
+              if (Array.isArray(checkResults)) {
+                for (const r of checkResults) {
+                  const val = typeof r === 'object' && r !== null ? r.result : r;
+                  if (val !== null && val !== undefined && val !== '') {
+                    isRedisLocked = true;
+                    break;
+                  }
                 }
               }
             }
@@ -201,29 +271,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 7.b Check Supabase spin_history on 3 vectors
       try {
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        const orConditions = [
-          `session_id.eq.${fingerprint}`,
-          `ip_address.eq.${ip}`
-        ];
-        if (userId) {
-          orConditions.push(`session_id.eq.${userId}`);
-        }
+        const orConditions: string[] = [];
+        if (fingerprint) orConditions.push(`session_id.eq.${fingerprint}`);
+        if (session_id) orConditions.push(`session_id.eq.${session_id}`);
+        if (userId) orConditions.push(`session_id.eq.${userId}`);
+        if (ip) orConditions.push(`ip_address.eq.${ip}`);
 
-        const { data: recentSpins, error: spinError } = await supabase
-          .from('spin_history')
-          .select('id')
-          .eq('wheel_id', wheel_id)
-          .gte('created_at', twentyFourHoursAgo)
-          .or(orConditions.join(','));
+        if (orConditions.length > 0) {
+          let query = supabase
+            .from('spin_history')
+            .select('id')
+            .eq('wheel_id', wheel_id);
 
-        if (spinError) {
-          console.error('Supabase spin history check error:', spinError);
-        } else if (recentSpins && recentSpins.length > 0) {
-          return res.status(403).json({
-            error: 'Bạn đã nhận Lộc Lời Chúa hôm nay rồi. Hẹn gặp lại bạn vào ngày mai!',
-            code: 'RATE_LIMIT_EXCEEDED'
-          });
+          if (sinceDate) {
+            query = query.gte('created_at', sinceDate.toISOString());
+          }
+
+          const { data: recentSpins, error: spinError } = await query.or(orConditions.join(','));
+
+          if (spinError) {
+            console.error('Supabase spin history check error:', spinError);
+          } else if (recentSpins && recentSpins.length > 0) {
+            return res.status(403).json({
+              error: 'Bạn đã nhận Lộc Lời Chúa hôm nay rồi. Hẹn gặp lại bạn vào ngày mai!',
+              code: 'RATE_LIMIT_EXCEEDED'
+            });
+          }
         }
       } catch (dbErr) {
         console.error('Database check error:', dbErr);
@@ -242,27 +315,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'No blessings found for this wheel' });
     }
 
-    // 9. CSPRNG selection calling crypto.getRandomValues if available
+    // 9. CSPRNG selection with uniform distribution mapping
     const getRandomIndex = (max: number): number => {
       const array = new Uint32Array(1);
-      if (typeof globalThis.crypto?.getRandomValues === 'function') {
-        globalThis.crypto.getRandomValues(array);
-      } else if (crypto.webcrypto && typeof crypto.webcrypto.getRandomValues === 'function') {
-        (crypto.webcrypto as unknown as { getRandomValues: typeof crypto.getRandomValues }).getRandomValues(array);
-      } else {
-        const buffer = crypto.randomBytes(4);
-        array[0] = buffer.readUInt32BE(0);
-      }
-      return array[0] % max;
+      const limit = Math.floor(4294967296 / max) * max;
+      let val: number;
+      do {
+        if (typeof globalThis.crypto?.getRandomValues === 'function') {
+          globalThis.crypto.getRandomValues(array);
+        } else if (crypto.webcrypto && typeof crypto.webcrypto.getRandomValues === 'function') {
+          (crypto.webcrypto as unknown as { getRandomValues: typeof crypto.getRandomValues }).getRandomValues(array);
+        } else {
+          const buffer = crypto.randomBytes(4);
+          array[0] = buffer.readUInt32BE(0);
+        }
+        val = array[0];
+      } while (val >= limit);
+      return val % max;
     };
 
     const selectedIdx = getRandomIndex(blessings.length);
     const blessing = blessings[selectedIdx];
 
     // 10. Target angle calculation
-    const display_slots = wheel.display_slots && wheel.display_slots > 0 
-      ? wheel.display_slots 
-      : blessings.length;
+    const display_slots = (wheel.config?.display_slots || wheel.display_slots || blessings.length);
     const slot_idx = selectedIdx % display_slots;
     const target_angle = 2 * Math.PI - (slot_idx + 0.5) * (2 * Math.PI / display_slots);
 
@@ -274,12 +350,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .digest('hex');
 
     // 12. Create spin record
-    // session_id stores the authenticated user ID if available, to prevent fingerprint spoofing
     const spinRecord = {
       wheel_id,
       blessing_id: blessing.id,
       item_spun: blessing.category,
-      session_id: userId || fingerprint,
+      session_id: session_id || userId || fingerprint,
       ip_address: ip,
       parishioner_name: name || 'Ẩn danh',
       parishioner_group: group || '',
@@ -293,16 +368,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ['LPUSH', 'spin_queue', JSON.stringify(spinRecord)]
         ];
 
-        // If lock is active, set Redis locks with 24 hours TTL
+        // If lock is active, set Redis locks with calculated TTL
         if (isLockActive) {
-          pipelineCommands.push(
-            ['SET', `spin_lock:${wheel_id}:${fingerprint}`, '1', 'EX', '86400'],
-            ['SET', `spin_lock:${wheel_id}:${ip}`, '1', 'EX', '86400']
-          );
+          const ttlStr = String(redisTtl);
+          if (fingerprint) {
+            pipelineCommands.push(['SET', `spin_lock:${wheel_id}:${fingerprint}`, '1', 'EX', ttlStr]);
+          }
+          if (ip) {
+            pipelineCommands.push(['SET', `spin_lock:${wheel_id}:${ip}`, '1', 'EX', ttlStr]);
+          }
+          if (session_id) {
+            pipelineCommands.push(['SET', `spin_lock:${wheel_id}:${session_id}`, '1', 'EX', ttlStr]);
+          }
           if (userId) {
-            pipelineCommands.push(
-              ['SET', `spin_lock:${wheel_id}:${userId}`, '1', 'EX', '86400']
-            );
+            pipelineCommands.push(['SET', `spin_lock:${wheel_id}:${userId}`, '1', 'EX', ttlStr]);
           }
         }
 

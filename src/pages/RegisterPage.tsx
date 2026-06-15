@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { dbService } from '../services/db';
 import { supabase } from '../services/supabaseClient';
-import { Church, Loader, CheckCircle2, AlertTriangle, Mail } from 'lucide-react';
+import { Church, Loader } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
   const { signUp } = useAuth();
@@ -17,8 +17,6 @@ export const RegisterPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   // Slug live validation states
-  const [slugStatus, setSlugStatus] = useState<'valid' | 'duplicate' | null>(null);
-  const [slugError, setSlugError] = useState<string | null>(null);
   const [checkingSlug, setCheckingSlug] = useState(false);
   
   const [loading, setLoading] = useState(false);
@@ -43,25 +41,14 @@ export const RegisterPage: React.FC = () => {
   // Debounced Slug Uniqueness check
   useEffect(() => {
     if (!slug || slug.length < 3) {
-      Promise.resolve().then(() => {
-        setSlugStatus(null);
-        setSlugError(null);
-      });
       return;
     }
 
     const handler = setTimeout(async () => {
       setCheckingSlug(true);
-      setSlugError(null);
-      setSlugStatus(null);
       try {
         const isUnique = await dbService.checkParishSlugUnique(slug);
-        if (isUnique) {
-          setSlugStatus('valid');
-        } else {
-          setSlugStatus('duplicate');
-          setSlugError('Đường dẫn này đã có giáo xứ sử dụng. Đang gợi ý...');
-          
+        if (!isUnique) {
           // Generate a suggested unique slug
           const originalSlug = slug;
           let counter = 1;
@@ -94,7 +81,6 @@ export const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSlugError(null);
 
     if (slug.length < 3) {
       setError('Đường dẫn Giáo xứ phải chứa ít nhất 3 ký tự.');
@@ -106,9 +92,7 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    const requireInviteCode = import.meta.env.VITE_REQUIRE_INVITE_CODE !== 'false';
-
-    if (requireInviteCode && !invitationCode.trim()) {
+    if (!invitationCode.trim()) {
       setError('Vui lòng nhập mã mời xác thực.');
       return;
     }
@@ -124,32 +108,23 @@ export const RegisterPage: React.FC = () => {
       }
 
       // Step A: Call backend to verify invitation code
-      if (requireInviteCode && supabase) {
-        try {
-          const verifyRes = await fetch('/api/verify-invite', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ code: invitationCode }),
-          });
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || !supabase;
+      if (isLocal) {
+        if (invitationCode.trim() !== 'vqlc2026') {
+          throw new Error('Mã mời cục bộ không chính xác (Mặc định: vqlc2026).');
+        }
+      } else if (supabase) {
+        const verifyRes = await fetch('/api/verify-invite', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ code: invitationCode }),
+        });
 
-          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          if (verifyRes.status === 404 && isLocal) {
-            console.warn('[Local Dev] API /api/verify-invite returned 404. Bypassing invite code check for easier local testing.');
-          } else {
-            const verifyData = await verifyRes.json();
-            if (!verifyRes.ok || !verifyData.success) {
-              throw new Error(verifyData.error || 'Mã mời không chính xác hoặc đã hết hạn.');
-            }
-          }
-        } catch (err) {
-          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-          if (isLocal) {
-            console.warn('[Local Dev] Failed to call verify-invite API, bypassing for local testing:', err);
-          } else {
-            throw err;
-          }
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok || !verifyData.success) {
+          throw new Error(verifyData.error || 'Mã mời không chính xác hoặc đã hết hạn.');
         }
       }
 
@@ -229,89 +204,15 @@ export const RegisterPage: React.FC = () => {
             />
           </div>
 
-          <div className="form-group">
+          <div className="form-group" style={{ display: 'none' }}>
             <label htmlFor="slug" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
               Đường dẫn chia sẻ (Slug URL)
             </label>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'stretch', 
-              borderRadius: '8px', 
-              border: slugStatus === 'valid' 
-                ? '1.5px solid var(--color-success)' 
-                : slugStatus === 'duplicate' 
-                ? '1.5px solid var(--color-warning)' 
-                : '1.5px solid rgba(15, 61, 46, 0.15)', 
-              overflow: 'hidden' 
-            }}>
-              <span style={{
-                display: 'flex',
-                alignItems: 'center',
-                backgroundColor: 'rgba(15, 61, 46, 0.05)',
-                padding: '0 12px',
-                fontSize: '13px',
-                color: 'var(--color-text-muted)',
-                fontWeight: '500',
-                borderRight: '1.5px solid rgba(15, 61, 46, 0.15)',
-                whiteSpace: 'nowrap'
-              }}>
-                vongquayloichua.com/giao-xu/
-              </span>
-              <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
-                <input
-                  id="slug"
-                  type="text"
-                  className="form-control"
-                  placeholder="giao-xu-chau-son"
-                  value={slug}
-                  onChange={(e) => {
-                    const val = e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-                    setSlug(val);
-                  }}
-                  required
-                  style={{
-                    height: '42px',
-                    border: 'none',
-                    borderRadius: 0,
-                    paddingRight: '36px',
-                    backgroundColor: slugStatus === 'valid'
-                      ? 'rgba(21, 154, 91, 0.02)'
-                      : slugStatus === 'duplicate'
-                      ? 'rgba(245, 158, 11, 0.02)'
-                      : '#FFFFFF'
-                  }}
-                />
-                <div style={{ position: 'absolute', right: '10px', display: 'flex', alignItems: 'center' }}>
-                  {checkingSlug && <Loader className="animate-spin" size={16} style={{ color: 'var(--color-gold)' }} />}
-                  {!checkingSlug && slugStatus === 'valid' && <CheckCircle2 size={16} style={{ color: 'var(--color-success)' }} />}
-                  {!checkingSlug && slugStatus === 'duplicate' && <AlertTriangle size={16} style={{ color: 'var(--color-warning)' }} />}
-                </div>
-              </div>
-            </div>
-            {slugError && (
-              <span style={{
-                fontSize: '11px',
-                color: slugStatus === 'duplicate' ? 'var(--color-warning)' : 'var(--color-error)',
-                marginTop: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}>
-                {slugError}
-              </span>
-            )}
-            {slugStatus === 'valid' && (
-              <span style={{
-                fontSize: '11px',
-                color: 'var(--color-success)',
-                marginTop: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}>
-                Đường dẫn hợp lệ & sẵn sàng!
-              </span>
-            )}
+            <input
+              id="slug"
+              type="hidden"
+              value={slug}
+            />
           </div>
 
           <div className="form-group">
@@ -346,35 +247,33 @@ export const RegisterPage: React.FC = () => {
             />
           </div>
 
-          {import.meta.env.VITE_REQUIRE_INVITE_CODE !== 'false' && (
-            <div className="form-group">
-              <label htmlFor="invitationCode" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
-                Mã mời xác thực
-              </label>
-              <input
-                id="invitationCode"
-                type="text"
-                className="form-control"
-                placeholder="Nhập mã mời của Giáo phận (Ví dụ: vqlc2026)"
-                value={invitationCode}
-                onChange={(e) => setInvitationCode(e.target.value.trim())}
-                required
-                style={{
-                  height: '44px',
-                  border: '1.5px solid rgba(15, 61, 46, 0.18)',
-                  borderRadius: '8px',
-                  textAlign: 'center',
-                  fontSize: '15px',
-                  fontWeight: '600',
-                  color: 'var(--color-primary)',
-                  backgroundColor: 'rgba(216, 180, 63, 0.02)',
-                  letterSpacing: '1px',
-                  outline: 'none',
-                  transition: 'all 0.2s'
-                }}
-              />
-            </div>
-          )}
+          <div className="form-group">
+            <label htmlFor="invitationCode" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+              Mã mời xác thực
+            </label>
+            <input
+              id="invitationCode"
+              type="text"
+              className="form-control"
+              placeholder="Nhập mã mời của Giáo phận (Ví dụ: vqlc2026)"
+              value={invitationCode}
+              onChange={(e) => setInvitationCode(e.target.value.trim())}
+              required
+              style={{
+                height: '44px',
+                border: '1.5px solid rgba(15, 61, 46, 0.18)',
+                borderRadius: '8px',
+                textAlign: 'center',
+                fontSize: '15px',
+                fontWeight: '600',
+                color: 'var(--color-primary)',
+                backgroundColor: 'rgba(216, 180, 63, 0.02)',
+                letterSpacing: '1px',
+                outline: 'none',
+                transition: 'all 0.2s'
+              }}
+            />
+          </div>
 
           <button
             type="submit"

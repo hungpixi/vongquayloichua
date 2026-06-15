@@ -1,18 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-const STEP_MS = 15 * 60 * 1000; // 15 minutes
-
-function generateCode(secretKey: string, block: number): string {
-  const payload = `${secretKey}-${block}`;
-  let hash = 0;
-  for (let i = 0; i < payload.length; i++) {
-    hash = (hash << 5) - hash + payload.charCodeAt(i);
-    hash |= 0;
-  }
-  const code = Math.abs(hash) % 1000000;
-  return code.toString().padStart(6, '0');
-}
 
 function getCorsHeaders(req: VercelRequest): { [key: string]: string } | null {
   const origin = (req.headers.origin || req.headers.Origin) as string;
@@ -85,8 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
       const { data: { user }, error } = await supabase.auth.getUser(token);
 
-      if (error || !user) {
-        return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.' });
+      if (error || !user || user.is_anonymous || user.app_metadata?.provider === 'anonymous') {
+        return res.status(403).json({ error: 'Truy cập bị từ chối. Tài khoản của bạn không được phép lấy mã mời.' });
       }
     } else {
       // Khi chạy offline, chỉ cho phép từ localhost

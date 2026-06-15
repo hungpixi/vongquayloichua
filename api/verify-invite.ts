@@ -1,17 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const STEP_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
-
-function generateCode(secretKey: string, block: number): string {
-  const payload = `${secretKey}-${block}`;
-  let hash = 0;
-  for (let i = 0; i < payload.length; i++) {
-    hash = (hash << 5) - hash + payload.charCodeAt(i);
-    hash |= 0; // Convert to 32bit integer
-  }
-  const code = Math.abs(hash) % 1000000;
-  return code.toString().padStart(6, '0');
-}
 
 // Helper to dynamically check and get CORS headers
 function getCorsHeaders(req: VercelRequest): { [key: string]: string } | null {
