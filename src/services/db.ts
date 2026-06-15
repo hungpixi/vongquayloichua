@@ -46,6 +46,7 @@ export interface Wheel {
   enable_confetti: boolean;
   enable_sound: boolean;
   lock_duration: string; // 'none' | '24h' | 'forever'
+  is_active?: boolean;
   deleted_at?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -65,6 +66,10 @@ export interface Wheel {
   custom_win_sfx_url?: string;
   display_slots?: number;
   slot_display_type?: string;
+  card_template?: string;
+  card_text_color?: string;
+  card_font_size?: string;
+  card_greeting?: string;
 }
 
 export interface Blessing {
@@ -258,7 +263,11 @@ const initLocalStorage = () => {
       mass_schedule: 'Ngày thường: 05:00, 17:30 | Chúa Nhật: 05:00, 07:00, 17:30',
       greeting: 'Chúc bạn nhận được Ơn lành từ Chúa Thánh Thần!',
       display_slots: 12,
-      slot_display_type: 'mixed'
+      slot_display_type: 'mixed',
+      card_template: 'default',
+      card_text_color: '',
+      card_font_size: '16',
+      card_greeting: 'Nguyện xin Lời Chúa là nguồn sức mạnh của bạn!'
     };
     wheels.push(mockWheel);
     localStorage.setItem('local_wheels', JSON.stringify(wheels));
@@ -521,6 +530,55 @@ export const dbService = {
     }
   },
 
+  async getAllParishes(): Promise<Parish[]> {
+    if (isOnline()) {
+      const { data, error } = await supabase!
+        .from('parishes')
+        .select('*')
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } else {
+      const parishes = getLocalData<Parish>('local_parishes');
+      return [...parishes].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+  },
+
+  async getAllSystemStats(): Promise<{ totalParishes: number; totalWheels: number; totalSpins: number }> {
+    if (isOnline()) {
+      const { count: totalParishes, error: pError } = await supabase!
+        .from('parishes')
+        .select('*', { count: 'exact', head: true });
+      if (pError) throw pError;
+
+      const { count: totalWheels, error: wError } = await supabase!
+        .from('wheels')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+      if (wError) throw wError;
+
+      const { count: totalSpins, error: sError } = await supabase!
+        .from('spin_history')
+        .select('*', { count: 'exact', head: true });
+      if (sError) throw sError;
+
+      return {
+        totalParishes: totalParishes || 0,
+        totalWheels: totalWheels || 0,
+        totalSpins: totalSpins || 0
+      };
+    } else {
+      const parishes = getLocalData<Parish>('local_parishes');
+      const wheels = getLocalData<Wheel>('local_wheels').filter(w => !w.deleted_at);
+      const spinHistory = getLocalData<SpinHistory>('local_spin_history');
+      return {
+        totalParishes: parishes.length,
+        totalWheels: wheels.length,
+        totalSpins: spinHistory.length
+      };
+    }
+  },
+
   async createParish(ownerId: string, name: string, slug: string): Promise<Parish> {
     let parish: Parish;
     if (isOnline()) {
@@ -643,7 +701,7 @@ export const dbService = {
         .from('wheels')
         .select('*')
         .eq('parish_id', parishId)
-        .is('deleted_at', null)
+        .eq('is_active', true)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -663,7 +721,7 @@ export const dbService = {
         .select('*')
         .eq('parish_id', parish.id)
         .eq('slug', wheelSlug)
-        .is('deleted_at', null)
+        .eq('is_active', true)
         .maybeSingle();
 
       if (error) throw error;
@@ -688,7 +746,7 @@ export const dbService = {
         .from('wheels')
         .select('*, parishes(*)')
         .eq('id', wheelId)
-        .is('deleted_at', null)
+        .eq('is_active', true)
         .maybeSingle();
 
       if (error) throw error;
@@ -822,7 +880,7 @@ export const dbService = {
         .select('id')
         .eq('parish_id', parishId)
         .eq('slug', slug)
-        .is('deleted_at', null);
+        .eq('is_active', true);
       if (excludeId) {
         query = query.neq('id', excludeId);
       }
@@ -849,7 +907,7 @@ export const dbService = {
     if (isOnline()) {
       const { error } = await supabase!
         .from('wheels')
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ is_active: false })
         .eq('id', wheelId);
       if (error) throw error;
     } else {
@@ -991,6 +1049,15 @@ export const dbService = {
     }
 
     await this.saveBlessings(wheelId, list);
+
+    // Đồng bộ theme và card template tương ứng với presetType
+    const themePreset = presetType === 'gifts' ? 'pentecost' : presetType;
+    const cardTemplate = presetType === 'tet' ? 'tet' : presetType === 'christmas' ? 'christmas' : presetType === 'joseph' ? 'wood' : presetType === 'eucharist' ? 'gold' : 'default';
+
+    await this.updateWheel(wheelId, {
+      theme_preset: themePreset,
+      card_template: cardTemplate
+    });
   },
 
   // --- SPIN HISTORY OPERATIONS ---
