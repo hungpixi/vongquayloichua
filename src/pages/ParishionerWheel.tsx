@@ -258,14 +258,22 @@ export const ParishionerWheel: React.FC = () => {
   const [showWinnerModal, setShowWinnerModal] = useState(false);
   const [lockedBlessing, setLockedBlessing] = useState<LockedBlessing | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [isAdClosed, setIsAdClosed] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('ad_closed_giochacho') === 'true';
+  });
 
   const [cachedBgUrl, setCachedBgUrl] = useState<string>('');
   const [cachedLogoUrl, setCachedLogoUrl] = useState<string>('');
 
   // DIY Audio States
   const [isBgmPlaying, setIsBgmPlaying] = useState(false);
-  const [isBgmMuted, setIsBgmMuted] = useState(true); // Mặc định câm để tránh bị chặn
+  const [isBgmMuted, setIsBgmMuted] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('bgm_muted') === 'true';
+  });
   const bgmAudioRef = useRef<HTMLAudioElement | null>(null);
+  const bgmPlayPromiseRef = useRef<Promise<void> | null>(null);
   const spinClickCountRef = useRef(0);
 
   // Share lộc động cá nhân hóa states
@@ -378,28 +386,38 @@ export const ParishionerWheel: React.FC = () => {
   const animateSpinRef = useRef<() => void>(() => {});
 
   const getThemeColors = (preset?: string) => {
+    if (preset === 'custom' && wheel?.custom_colors) {
+      const colors = wheel.custom_colors.split(',').map(c => c.trim()).filter(c => /^#[0-9A-F]{6}$/i.test(c));
+      if (colors.length > 0) {
+        const paddedColors = [...colors];
+        while (paddedColors.length < 6) {
+          paddedColors.push(...colors);
+        }
+        return paddedColors;
+      }
+    }
     switch (preset) {
-      case 'christmas': // Giáng Sinh: Đỏ Crimson sẫm, Xanh lá thông cổ điển, Vàng Gold sang, Trắng kem tuyết, Xanh dương đêm, Đỏ Crimson sẫm hơn
-        return ['#A81D22', '#0D4A30', '#D4A33B', '#F7F7F7', '#0F2C59', '#7A0E12'];
-      case 'tet': // Tết Nguyên Đán: Đỏ cờ hội, Vàng Hoàng kim nhạt, Hồng Đào ấm, Trắng kem sữa, Cam quýt ngọt, Đỏ cờ hội sẫm
-        return ['#B81D24', '#E5A93B', '#F3A0A7', '#FFFDF2', '#D96B27', '#8A1015'];
-      case 'easter': // Phục Sinh: Vàng nắng sớm, Trắng huệ thanh sạch, Vàng pastel dịu, Xanh lá non, Tím Phục Sinh vương giả, Vàng pastel dịu hơn
-        return ['#E5B82B', '#FFFFFF', '#FFF3CD', '#6FCF97', '#9B51E0', '#FFEAA7'];
-      case 'pentecost': // Hiện Xuống (7 Ơn): Đỏ lửa rực, Cam lửa ấm, Vàng hoa cúc, Trắng kem gió thánh, Cam đỏ, Đỏ lửa rực sẫm
-        return ['#C0392B', '#D35400', '#F39C12', '#FFFDF5', '#E65100', '#901E13'];
-      case 'lent': // Mùa Chay: Tím phụng vụ trầm, Tím sẫm hối cải, Oải hương tro buồn, Xám tro bụi, Tím hoa cà sẫm, Tím hối cải cực sẫm
-        return ['#5B21B6', '#4C1D95', '#A78BFA', '#9CA3AF', '#D1C4E9', '#3B127D'];
-      case 'advent': // Mùa Vọng: Tím hoa cà đậm, Hồng Gaudete, Tím vương quyền, Xanh hy vọng, Hồng nhạt, Tím hoa cà cực sẫm
-        return ['#581C56', '#EC4899', '#4A044E', '#047857', '#C084FC', '#380436'];
-      case 'marian': // Đức Mẹ: Xanh trời dịu mát, Trắng dâng Mẹ tinh tuyền, Xanh Navy sâu thẳm, Xanh ngọc nhẹ, Vàng ánh dương, Xanh Navy cực sẫm
-        return ['#1E65A7', '#FFFFFF', '#1D3557', '#A8DADC', '#E9C46A', '#153A64'];
-      case 'joseph': // Thánh Giuse: Nâu đất sét, Nâu gỗ óc chó, Vàng rơm nhạt, Trắng sữa cổ điển, Xanh thợ mộc, Nâu gỗ óc chó cực sẫm
-        return ['#704F37', '#5C3A21', '#D2B48C', '#FDF5E6', '#1E5E4E', '#4E342E'];
-      case 'eucharist': // Thánh Thể: Vàng đồng cổ, Trắng ngà Mình Thánh, Vàng bánh thánh, Vàng đồng sáng, Đỏ rượu vang cực sẫm
-        return ['#B8860B', '#FFFFFA', '#CD7F32', '#FFD700', '#FF8F00', '#5E0000'];
-      case 'gold': // Cổ Điển / Mặc Định: Xanh phụng vụ trầm & Vàng thau đánh bóng
+      case 'christmas': // Giáng Sinh: Đỏ và Xanh Noel tươi sáng, Vàng kim rực rỡ, Trắng tuyết
+        return ['#EF4444', '#10B981', '#F59E0B', '#FFFFFF', '#3B82F6', '#DC2626'];
+      case 'tet': // Tết Nguyên Đán: Đỏ tươi xuân, Vàng Hoàng kim nhạt, Hồng Đào ấm, Cam quýt ngọt
+        return ['#FF4D4D', '#FFB703', '#FF85A2', '#FFFDF2', '#FF7A00', '#D90429'];
+      case 'easter': // Phục Sinh: Vàng nắng sớm, Trắng huệ, Xanh lá non, Tím Phục Sinh vương giả
+        return ['#FBBF24', '#FFFFFF', '#FEF3C7', '#4ADE80', '#A78BFA', '#FFFBEB'];
+      case 'pentecost': // Hiện Xuống (7 Ơn): Đỏ lửa rực, Cam lửa ấm, Vàng hoa cúc, Trắng kem gió thánh
+        return ['#FF3B30', '#FF9500', '#FFCC00', '#FFFDF5', '#FF5E00', '#E63946'];
+      case 'lent': // Mùa Chay: Tím phụng vụ trầm, Oải hương nhạt, Xám tro bụi
+        return ['#8B5CF6', '#6D28D9', '#C084FC', '#E5E7EB', '#DDD6FE', '#5B21B6'];
+      case 'advent': // Mùa Vọng: Tím hoa cà đậm, Hồng Gaudete, Tím vương quyền, Xanh hy vọng
+        return ['#A855F7', '#EC4899', '#7C3AED', '#10B981', '#F472B6', '#6B21A8'];
+      case 'marian': // Đức Mẹ: Xanh trời dịu mát, Trắng dâng Mẹ tinh tuyền, Xanh Navy sâu thẳm, Xanh ngọc nhẹ
+        return ['#3B82F6', '#FFFFFF', '#1D4ED8', '#60A5FA', '#FBBF24', '#1E40AF'];
+      case 'joseph': // Thánh Giuse: Nâu đất sét, Nâu gỗ óc chó, Vàng rơm nhạt, Trắng sữa, Xanh thợ mộc
+        return ['#B45309', '#854D0E', '#FBBF24', '#FFFDF9', '#059669', '#78350F'];
+      case 'eucharist': // Thánh Thể: Vàng Mình Thánh Chúa rực rỡ, Trắng Mình Thánh, Đỏ rượu nho
+        return ['#F59E0B', '#FFFFFA', '#D97706', '#FCD34D', '#EF4444', '#B45309'];
+      case 'gold': // Cổ Điển / Mặc Định: Ngọc lục bảo & Vàng kim cao cấp
       default:
-        return ['#0E3A2F', '#D4AF37', '#1E5E4E', '#FFFBF0', '#164E3E', '#08251E'];
+        return ['#059669', '#F59E0B', '#34D399', '#FFFDF5', '#047857', '#065F46'];
     }
   };
 
@@ -453,7 +471,7 @@ export const ParishionerWheel: React.FC = () => {
         setCachedBgUrl(bgUrl);
       }
 
-      const logoUrl = parish?.logo_url || '';
+      const logoUrl = wheel?.logo_url || parish?.logo_url || '';
       if (logoUrl) {
         try {
           const localLogo = await dbService.getCachedAssetUrl(logoUrl);
@@ -671,18 +689,35 @@ export const ParishionerWheel: React.FC = () => {
           const audio = new Audio(audioUrl);
           audio.volume = res.wheel.bgm_volume ?? 0.3;
           audio.loop = true;
-          audio.muted = true; // Bắt đầu ở chế độ câm để tránh bị chặn
+          
+          const isMutedPref = localStorage.getItem('bgm_muted') === 'true';
+          audio.muted = isMutedPref;
           bgmAudioRef.current = audio;
           
-          audio.play()
-            .then(() => {
-              if (isMountedRef.current) {
-                setIsBgmPlaying(true);
-              }
-            })
-            .catch(err => {
-              console.warn('BGM autoplay blocked, waiting for interaction:', err);
-            });
+          if (!isMutedPref) {
+            const promise = audio.play();
+            if (promise !== undefined) {
+              bgmPlayPromiseRef.current = promise;
+              promise
+                .then(() => {
+                  bgmPlayPromiseRef.current = null;
+                  if (isMountedRef.current) {
+                    setIsBgmPlaying(true);
+                    setIsBgmMuted(false);
+                  }
+                })
+                .catch(err => {
+                  bgmPlayPromiseRef.current = null;
+                  console.warn('BGM autoplay blocked, waiting for interaction:', err);
+                  if (isMountedRef.current) {
+                    audio.muted = true;
+                    setIsBgmMuted(true);
+                  }
+                });
+            }
+          } else {
+            setIsBgmMuted(true);
+          }
         }
       }
     } catch (e) {
@@ -901,7 +936,18 @@ export const ParishionerWheel: React.FC = () => {
         audioContextRef.current = null;
       }
       if (bgmAudioRef.current) {
-        bgmAudioRef.current.pause();
+        const audio = bgmAudioRef.current;
+        if (bgmPlayPromiseRef.current) {
+          bgmPlayPromiseRef.current
+            .then(() => {
+              audio.pause();
+            })
+            .catch(() => {
+              audio.pause();
+            });
+        } else {
+          audio.pause();
+        }
         bgmAudioRef.current = null;
       }
     };
@@ -912,15 +958,29 @@ export const ParishionerWheel: React.FC = () => {
     const handleFirstUserInteraction = () => {
       if (wheel && wheel.bgm_enabled && bgmAudioRef.current) {
         const audio = bgmAudioRef.current;
-        if (audio.muted) {
+        const isMutedPref = localStorage.getItem('bgm_muted') === 'true';
+        if (!isMutedPref && audio.muted) {
           initAudio();
           audio.muted = false;
-          audio.play()
-            .then(() => {
-              setIsBgmPlaying(true);
-              setIsBgmMuted(false);
-            })
-            .catch(err => console.warn('BGM interaction play failed:', err));
+          setIsBgmMuted(false);
+          
+          if (audio.paused && !bgmPlayPromiseRef.current) {
+            const promise = audio.play();
+            if (promise !== undefined) {
+              bgmPlayPromiseRef.current = promise;
+              promise
+                .then(() => {
+                  bgmPlayPromiseRef.current = null;
+                  if (isMountedRef.current) {
+                    setIsBgmPlaying(true);
+                  }
+                })
+                .catch(err => {
+                  bgmPlayPromiseRef.current = null;
+                  console.warn('BGM interaction play failed:', err);
+                });
+            }
+          }
         }
       }
       // Loại bỏ lắng nghe sau tương tác đầu tiên
@@ -1057,15 +1117,31 @@ export const ParishionerWheel: React.FC = () => {
 
     initAudio();
 
-    // Kích hoạt BGM nếu được bật và đang bị browser block/mute
-    if (wheel.bgm_enabled && bgmAudioRef.current && bgmAudioRef.current.muted) {
-      bgmAudioRef.current.muted = false;
-      bgmAudioRef.current.play()
-        .then(() => {
-          setIsBgmPlaying(true);
-          setIsBgmMuted(false);
-        })
-        .catch(e => console.warn('BGM play on spin error:', e));
+    // Kích hoạt BGM nếu được bật và đang bị browser block/mute, nhưng chỉ khi người dùng không chọn tắt tiếng trước đó
+    const isMutedPref = localStorage.getItem('bgm_muted') === 'true';
+    if (wheel.bgm_enabled && bgmAudioRef.current && !isMutedPref && bgmAudioRef.current.muted) {
+      const audio = bgmAudioRef.current;
+      audio.muted = false;
+      setIsBgmMuted(false);
+      if (audio.paused && !bgmPlayPromiseRef.current) {
+        const promise = audio.play();
+        if (promise !== undefined) {
+          bgmPlayPromiseRef.current = promise;
+          promise
+            .then(() => {
+              bgmPlayPromiseRef.current = null;
+              if (isMountedRef.current) {
+                setIsBgmPlaying(true);
+              }
+            })
+            .catch(e => {
+              bgmPlayPromiseRef.current = null;
+              console.warn('BGM play on spin error:', e);
+            });
+        }
+      } else {
+        setIsBgmPlaying(true);
+      }
     }
 
     spinClickCountRef.current = 0; // Reset số click nhịp để Harp gảy nốt đầu tiên
@@ -1228,21 +1304,59 @@ export const ParishionerWheel: React.FC = () => {
     
     initAudio();
     
-    if (isBgmMuted) {
+    const currentlyMuted = audio.muted;
+    
+    if (currentlyMuted) {
       audio.muted = false;
-      if (audio.paused) {
-        audio.play()
-          .then(() => setIsBgmPlaying(true))
-          .catch(e => console.warn(e));
-      }
       setIsBgmMuted(false);
+      localStorage.setItem('bgm_muted', 'false');
       showToast('Đã bật nhạc nền Thánh ca');
+      
+      if (audio.paused) {
+        if (!bgmPlayPromiseRef.current) {
+          const promise = audio.play();
+          if (promise !== undefined) {
+            bgmPlayPromiseRef.current = promise;
+            promise
+              .then(() => {
+                bgmPlayPromiseRef.current = null;
+                if (isMountedRef.current) {
+                  setIsBgmPlaying(true);
+                }
+              })
+              .catch(err => {
+                bgmPlayPromiseRef.current = null;
+                console.warn('BGM play failed:', err);
+              });
+          }
+        }
+      }
     } else {
       audio.muted = true;
       setIsBgmMuted(true);
+      localStorage.setItem('bgm_muted', 'true');
       showToast('Đã tắt nhạc nền');
+      
+      if (bgmPlayPromiseRef.current) {
+        bgmPlayPromiseRef.current
+          .then(() => {
+            audio.pause();
+            if (isMountedRef.current) {
+              setIsBgmPlaying(false);
+            }
+          })
+          .catch(() => {
+            audio.pause();
+            if (isMountedRef.current) {
+              setIsBgmPlaying(false);
+            }
+          });
+      } else {
+        audio.pause();
+        setIsBgmPlaying(false);
+      }
     }
-  }, [isBgmMuted, initAudio, showToast]);
+  }, [initAudio, showToast]);
 
   const handleCopyBlessing = useCallback((text: string, quote?: string) => {
     const copyText = `🙏 LỘC LỜI CHÚA 🙏\n\n“ ${text} ”${
@@ -1331,11 +1445,10 @@ export const ParishionerWheel: React.FC = () => {
         style={{
           borderRadius: '24px',
           border: wheel.theme_preset === 'christmas' ? '6px double #F59E0B' : `2px solid ${cardBorderColor}`,
-          padding: '12px',
           display: 'flex',
           flexDirection: 'column',
-          width: isMobile ? '95%' : '100%',
-          maxWidth: isMobile ? '95%' : '430px',
+          width: '100%',
+          maxWidth: '430px',
           position: isModal ? 'relative' : undefined,
           flexShrink: isModal ? undefined : 0,
           flex: isModal ? undefined : 1,
@@ -1349,12 +1462,9 @@ export const ParishionerWheel: React.FC = () => {
               if (!isModal) setWinnerBlessing(null);
             }}
             aria-label="Đóng"
+            className="winner-card-modal-close"
             style={{
               position: 'absolute',
-              top: '-12px',
-              right: '-12px',
-              width: '36px',
-              height: '36px',
               borderRadius: '50%',
               background: '#FFFFFF',
               border: `1.5px solid ${cardBorderColor}`,
@@ -1371,16 +1481,16 @@ export const ParishionerWheel: React.FC = () => {
             onMouseOver={e => (e.currentTarget.style.transform = 'scale(1.1)')}
             onMouseOut={e => (e.currentTarget.style.transform = 'scale(1)')}
           >
-            <X size={18} strokeWidth={2.5} />
+            <X className="winner-card-modal-close-icon" size={18} strokeWidth={2.5} />
           </button>
         )}
 
         {/* Inner border style with 4px margin to create double frame */}
         <div
+          className="winner-card-inner-border"
           style={{
             border: `1px solid ${cardBorderColor}a0`,
             borderRadius: '16px',
-            padding: '4px',
             boxSizing: 'border-box',
             width: '100%',
             height: '100%',
@@ -1389,10 +1499,10 @@ export const ParishionerWheel: React.FC = () => {
           }}
         >
           <div
+            className="winner-card-body"
             style={{
               border: `1.5px solid ${cardBorderColor}`,
               borderRadius: '12px',
-              padding: '24px 16px',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -1400,7 +1510,6 @@ export const ParishionerWheel: React.FC = () => {
               position: 'relative',
               boxSizing: 'border-box',
               width: '100%',
-              minHeight: '380px',
               justifyContent: 'center',
               flex: 1
             }}
@@ -1441,10 +1550,9 @@ export const ParishionerWheel: React.FC = () => {
 
             {/* Cross SVG icon */}
             <svg
+              className="winner-card-cross"
               viewBox="0 0 24 24"
-              width="40"
-              height="40"
-              style={{ color: cardBorderColor, marginBottom: '12px' }}
+              style={{ color: cardBorderColor }}
               fill="currentColor"
             >
               <path d="M12,5 A1.2,1.2 0 1,1 12,2.6 A1.2,1.2 0 1,1 12,5 Z" />
@@ -1455,13 +1563,12 @@ export const ParishionerWheel: React.FC = () => {
             </svg>
 
             <div
+              className="winner-card-parish-name"
               style={{
                 color: primaryDark,
                 fontWeight: 700,
-                fontSize: '11px',
                 letterSpacing: '2px',
                 textTransform: 'uppercase',
-                marginBottom: '6px',
                 fontFamily: "'Inter', sans-serif"
               }}
             >
@@ -1469,19 +1576,18 @@ export const ParishionerWheel: React.FC = () => {
             </div>
 
             <h2
+              className="winner-card-title"
               style={{
                 fontFamily: "'Playfair Display', Georgia, serif",
-                fontSize: '24px',
                 fontWeight: 800,
                 color: primaryDark,
-                margin: '0 0 12px 0',
                 letterSpacing: '0.5px'
               }}
             >
               LỘC LỜI CHÚA
             </h2>
 
-            <div style={{ display: 'flex', alignItems: 'center', width: '70%', margin: '0 auto 16px auto', gap: '8px' }}>
+            <div className="winner-card-divider-top" style={{ display: 'flex', alignItems: 'center', width: '70%', gap: '8px' }}>
               <div
                 style={{
                   height: '1px',
@@ -1501,14 +1607,12 @@ export const ParishionerWheel: React.FC = () => {
 
             {/* Category Badge */}
             <div
+              className="winner-card-badge"
               style={{
-                fontSize: '12px',
                 fontWeight: 800,
                 color: getTextContrastColor(presetColors[0], wheel.theme_preset),
                 background: presetColors[0],
-                padding: '6px 16px',
                 borderRadius: '20px',
-                marginBottom: '20px',
                 border: `1.5px solid ${cardBorderColor}`,
                 textTransform: 'uppercase',
                 letterSpacing: '1px',
@@ -1520,29 +1624,26 @@ export const ParishionerWheel: React.FC = () => {
 
             {/* Holy scripture passage */}
             <p
-              className="text-serif"
+              className="text-serif winner-card-scripture"
               style={{
-                fontSize,
+                '--scripture-font-size': fontSize,
+                fontSize: 'var(--scripture-font-size)',
                 lineHeight: '1.65',
                 color: '#1A202C',
                 fontStyle: 'italic',
-                margin: '8px 0 12px 0',
                 padding: '0 10px',
                 fontWeight: 500
-              }}
+              } as React.CSSProperties}
             >
               “ {winnerBlessing.text} ”
             </p>
 
             {winnerBlessing.quote && (
               <p
-                className="text-serif"
+                className="text-serif winner-card-quote"
                 style={{
                   fontWeight: '700',
-                  fontSize: '14px',
                   color: primaryDark,
-                  marginTop: '4px',
-                  marginBottom: '20px',
                   fontStyle: 'italic'
                 }}
               >
@@ -1551,35 +1652,33 @@ export const ParishionerWheel: React.FC = () => {
             )}
 
             <div
+              className="winner-card-divider-bottom"
               style={{
                 height: '1px',
                 width: '35%',
-                background: `linear-gradient(to right, transparent, ${cardBorderColor}80, transparent)`,
-                margin: '0 auto 16px auto'
+                background: `linear-gradient(to right, transparent, ${cardBorderColor}80, transparent)`
               }}
             ></div>
 
             {/* Warm Pastoral New Year Greeting */}
             <p
+              className="winner-card-greeting"
               style={{
-                fontSize: '11px',
                 color: 'var(--color-text-dark)',
                 fontWeight: '500',
                 fontStyle: 'italic',
                 lineHeight: '1.5',
-                margin: 0,
                 opacity: 0.85,
                 whiteSpace: 'pre-line'
               }}
             >
-              {parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
+              {wheel.card_greeting || wheel.greeting || parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
             </p>
 
             {/* Subtle branding signature inside card */}
             <div
+              className="winner-card-signature"
               style={{
-                marginTop: '16px',
-                fontSize: '9px',
                 color: `${cardBorderColor}a0`,
                 letterSpacing: '1.5px',
                 textTransform: 'uppercase',
@@ -1592,61 +1691,53 @@ export const ParishionerWheel: React.FC = () => {
 
             {/* Integrated Controls (Not captured in image export) */}
             <div
+              className="winner-card-controls"
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '12px',
-                marginTop: '24px',
                 borderTop: `1px solid ${cardBorderColor}30`,
-                paddingTop: '16px',
                 width: '100%'
               }}
             >
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', width: '100%' }}>
+              <div className="winner-card-btn-row" style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
                 <button
                   onClick={() => handleCopyBlessing(winnerBlessing.text, winnerBlessing.quote)}
-                  className="copy-blessing-btn"
+                  className="copy-blessing-btn winner-card-btn"
                   style={{
                     flex: 1,
                     justifyContent: 'center',
-                    height: '42px',
                     borderRadius: '12px',
                     background: `${primaryDark}15`,
                     border: `1.5px solid ${primaryDark}`,
                     color: primaryDark,
-                    fontSize: '13px',
                     fontWeight: '600',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
                     cursor: 'pointer'
                   }}
                 >
-                  <Copy size={15} />
+                  <Copy className="winner-card-btn-icon" size={15} />
                   <span>Sao chép chữ</span>
                 </button>
 
                 <button
                   onClick={handleDownloadPNG}
-                  className="btn btn-primary"
+                  className="btn btn-primary winner-card-btn"
                   style={{
                     flex: 1,
-                    height: '42px',
                     borderRadius: '12px',
                     background: presetColors[0],
                     color: getTextContrastColor(presetColors[0], wheel.theme_preset),
-                    fontSize: '13px',
                     fontWeight: '600',
                     boxShadow: `0 4px 12px ${presetColors[0]}25`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '6px',
                     cursor: 'pointer',
                     border: 'none'
                   }}
                 >
-                  <Download size={15} />
+                  <Download className="winner-card-btn-icon" size={15} />
                   Lưu ảnh Lộc
                 </button>
               </div>
@@ -1654,50 +1745,46 @@ export const ParishionerWheel: React.FC = () => {
               {/* Nút gửi tặng Lộc Thánh */}
               <button
                 onClick={() => setShowSharePanel(!showSharePanel)}
-                className="btn btn-primary btn-gold"
+                className="btn btn-primary btn-gold winner-card-gift-btn"
                 style={{
                   width: '100%',
-                  height: '42px',
                   borderRadius: '12px',
                   background: 'linear-gradient(135deg, #D8B43F 0%, #F59E0B 100%)',
                   color: '#FFFFFF',
-                  fontSize: '13.5px',
                   fontWeight: '700',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
                   cursor: 'pointer',
                   border: 'none',
-                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)',
-                  marginTop: '4px'
+                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.25)'
                 }}
               >
-                <Share2 size={16} />
+                <Share2 className="winner-card-btn-icon" size={16} />
                 <span>Gửi Tặng Lộc Lời Chúa</span>
               </button>
 
               {/* Panel Chia Sẻ Lộc Thánh */}
               {showSharePanel && (
-                <div style={{
-                  marginTop: '12px',
-                  background: 'rgba(255, 255, 255, 0.5)',
-                  border: '1px solid rgba(216, 180, 63, 0.35)',
-                  borderRadius: '12px',
-                  textAlign: 'left',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  padding: '10px'
-                }}>
+                <div
+                  className="winner-card-share-panel"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.5)',
+                    border: '1px solid rgba(216, 180, 63, 0.35)',
+                    borderRadius: '12px',
+                    textAlign: 'left',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                >
                   <div style={{ fontSize: '12px', fontWeight: '700', color: primaryDark, display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Gift size={13} className="text-gold" />
                     <span>CÁ NHÂN HÓA ĐỂ GỬI TẶNG</span>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div className="winner-card-share-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                     <div>
-                      <label style={{ fontSize: '10.5px', fontWeight: '600', color: '#4B5563', display: 'block', marginBottom: '2px' }}>
+                      <label className="winner-card-share-label" style={{ fontWeight: '600', color: '#4B5563', display: 'block' }}>
                         Tên người gửi (tùy chọn)
                       </label>
                       <input
@@ -1705,11 +1792,9 @@ export const ParishionerWheel: React.FC = () => {
                         placeholder="Giuse Hùng..."
                         value={shareSenderName}
                         onChange={(e) => setShareSenderName(e.target.value)}
+                        className="winner-card-share-input"
                         style={{
                           width: '100%',
-                          height: '32px',
-                          padding: '0 8px',
-                          fontSize: '11.5px',
                           border: '1.5px solid rgba(15, 61, 46, 0.15)',
                           borderRadius: '6px',
                           boxSizing: 'border-box'
@@ -1718,17 +1803,15 @@ export const ParishionerWheel: React.FC = () => {
                     </div>
 
                     <div>
-                      <label style={{ fontSize: '10.5px', fontWeight: '600', color: '#4B5563', display: 'block', marginBottom: '2px' }}>
+                      <label className="winner-card-share-label" style={{ fontWeight: '600', color: '#4B5563', display: 'block' }}>
                         Đối tượng nhận
                       </label>
                       <select
                         value={shareTemplate}
                         onChange={(e) => setShareTemplate(e.target.value as 'friend' | 'family' | 'group' | 'parish')}
+                        className="winner-card-share-input"
                         style={{
                           width: '100%',
-                          height: '32px',
-                          padding: '0 4px',
-                          fontSize: '11.5px',
                           border: '1.5px solid rgba(15, 61, 46, 0.15)',
                           borderRadius: '6px',
                           background: '#FFFFFF',
@@ -1744,7 +1827,7 @@ export const ParishionerWheel: React.FC = () => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '4px' }}>
+                  <div className="winner-card-share-btn-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                     <button
                       onClick={() => {
                         const payload = encodeSharePayload(winnerBlessing.id, shareSenderName, shareTemplate);
@@ -1753,22 +1836,20 @@ export const ParishionerWheel: React.FC = () => {
                         navigator.clipboard.writeText(fullMessage);
                         showToast('Đã sao chép link Lộc Thánh!');
                       }}
+                      className="winner-card-share-action-btn"
                       style={{
-                        height: '32px',
                         borderRadius: '6px',
                         background: primaryDark,
                         color: '#FFFFFF',
-                        fontSize: '11px',
                         fontWeight: '700',
                         border: 'none',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px'
+                        justifyContent: 'center'
                       }}
                     >
-                      <Copy size={11} />
+                      <Copy size={11} className="winner-card-share-action-icon" />
                       Sao chép link
                     </button>
 
@@ -1776,22 +1857,20 @@ export const ParishionerWheel: React.FC = () => {
                       href={`https://sp.zalo.me/share_to_zalo?url=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?s=${encodeSharePayload(winnerBlessing.id, shareSenderName, shareTemplate)}`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
+                      className="winner-card-share-action-btn"
                       style={{
-                        height: '32px',
                         borderRadius: '6px',
                         background: '#0068FF',
                         color: '#FFFFFF',
-                        fontSize: '11px',
                         fontWeight: '700',
                         textDecoration: 'none',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '4px',
                         cursor: 'pointer'
                       }}
                     >
-                      <span style={{ fontSize: '11px', fontWeight: 'bold' }}>Z</span>
+                      <span style={{ fontWeight: 'bold' }} className="winner-card-share-action-text-prefix">Z</span>
                       Chia sẻ Zalo
                     </a>
 
@@ -1799,22 +1878,20 @@ export const ParishionerWheel: React.FC = () => {
                       href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?s=${encodeSharePayload(winnerBlessing.id, shareSenderName, shareTemplate)}`)}`}
                       target="_blank"
                       rel="noopener noreferrer"
+                      className="winner-card-share-action-btn"
                       style={{
-                        height: '32px',
                         borderRadius: '6px',
                         background: '#1877F2',
                         color: '#FFFFFF',
-                        fontSize: '11px',
                         fontWeight: '700',
                         textDecoration: 'none',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '4px',
                         cursor: 'pointer'
                       }}
                     >
-                      <span style={{ fontSize: '11px', fontWeight: 'bold' }}>f</span>
+                      <span style={{ fontWeight: 'bold' }} className="winner-card-share-action-text-prefix">f</span>
                       Facebook
                     </a>
 
@@ -1834,26 +1911,24 @@ export const ParishionerWheel: React.FC = () => {
                             console.log('Web Share API error:', err);
                           }
                         }}
+                        className="winner-card-share-action-btn"
                         style={{
-                          height: '32px',
                           borderRadius: '6px',
                           background: '#F59E0B',
                           color: '#FFFFFF',
-                          fontSize: '11px',
                           fontWeight: '700',
                           border: 'none',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '4px'
+                          justifyContent: 'center'
                         }}
                       >
-                        <Share2 size={11} />
+                        <Share2 size={11} className="winner-card-share-action-icon" />
                         Khác
                       </button>
                     ) : (
-                      <div style={{ fontSize: '9px', color: '#6B7280', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 4px', lineHeight: '1.2' }}>
+                      <div className="winner-card-share-notice" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 4px', lineHeight: '1.2' }}>
                         * Chọn Zalo/FB để gửi tặng
                       </div>
                     )}
@@ -1867,15 +1942,13 @@ export const ParishionerWheel: React.FC = () => {
                     setShowWinnerModal(false);
                     if (!isModal) setWinnerBlessing(null);
                   }}
-                  className="btn btn-secondary"
+                  className="btn btn-secondary winner-card-close-btn"
                   style={{
                     width: '100%',
-                    height: '40px',
                     borderRadius: '12px',
                     background: 'rgba(0, 0, 0, 0.05)',
                     color: '#4B5563',
                     border: 'none',
-                    fontSize: '13px',
                     fontWeight: '500',
                     cursor: 'pointer',
                     display: 'flex',
@@ -2109,12 +2182,11 @@ export const ParishionerWheel: React.FC = () => {
                     fontStyle: 'italic',
                     lineHeight: '1.5',
                     margin: 0,
-                    opacity: 0.85
+                    opacity: 0.85,
+                    whiteSpace: 'pre-line'
                   }}
                 >
-                  Kính chúc quý cộng đoàn một năm mới bình an,
-                  <br />
-                  đầy tràn ân sủng của Thiên Chúa!
+                  {wheel.card_greeting || wheel.greeting || parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
                 </p>
 
                 <div
@@ -2236,21 +2308,50 @@ export const ParishionerWheel: React.FC = () => {
             style={{
               borderRadius: '24px',
               border: wheel.theme_preset === 'christmas' ? '6px double #F59E0B' : `2px solid ${cardBorderColor}`,
-              padding: '12px',
               display: 'flex',
               flexDirection: 'column',
-              width: isMobile ? '95%' : '100%',
+              width: '100%',
               boxSizing: 'border-box'
             }}
           >
-            <div style={{ border: `1px solid ${cardBorderColor}a0`, borderRadius: '16px', padding: '4px', boxSizing: 'border-box', width: '100%', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ border: `1.5px solid ${cardBorderColor}`, borderRadius: '12px', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', position: 'relative', boxSizing: 'border-box', width: '100%', minHeight: '380px', justifyContent: 'center' }}>
+            <div
+              className="winner-card-inner-border"
+              style={{
+                border: `1px solid ${cardBorderColor}a0`,
+                borderRadius: '16px',
+                boxSizing: 'border-box',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column'
+              }}
+            >
+              <div
+                className="winner-card-body"
+                style={{
+                  border: `1.5px solid ${cardBorderColor}`,
+                  borderRadius: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  textAlign: 'center',
+                  position: 'relative',
+                  boxSizing: 'border-box',
+                  width: '100%',
+                  justifyContent: 'center',
+                  flex: 1
+                }}
+              >
                 <CornerOrnamentSVG style={{ top: '8px', left: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} />
                 <CornerOrnamentSVG style={{ top: '8px', right: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipX={true} />
                 <CornerOrnamentSVG style={{ bottom: '8px', left: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipY={true} />
                 <CornerOrnamentSVG style={{ bottom: '8px', right: '8px', color: cardBorderColor }} isChristmas={wheel.theme_preset === 'christmas'} flipX={true} flipY={true} />
 
-                <svg viewBox="0 0 24 24" width="40" height="40" style={{ color: cardBorderColor, marginBottom: '12px' }} fill="currentColor">
+                <svg
+                  className="winner-card-cross"
+                  viewBox="0 0 24 24"
+                  style={{ color: cardBorderColor }}
+                  fill="currentColor"
+                >
                   <path d="M12,5 A1.2,1.2 0 1,1 12,2.6 A1.2,1.2 0 1,1 12,5 Z" />
                   <path d="M5,12 A1.2,1.2 0 1,1 2.6,12 A1.2,1.2 0 1,1 5,12 Z" />
                   <path d="M21.4,12 A1.2,1.2 0 1,1 19,12 A1.2,1.2 0 1,1 21.4,12 Z" />
@@ -2258,38 +2359,102 @@ export const ParishionerWheel: React.FC = () => {
                   <path d="M12,8.5 L15.5,12 L12,15.5 L8.5,12 Z" fill="none" stroke="currentColor" strokeWidth="0.8" />
                 </svg>
 
-                <div style={{ color: primaryDark, fontWeight: 700, fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '6px', fontFamily: "'Inter', sans-serif" }}>
+                <div
+                  className="winner-card-parish-name"
+                  style={{
+                    color: primaryDark,
+                    fontWeight: 700,
+                    letterSpacing: '2px',
+                    textTransform: 'uppercase',
+                    fontFamily: "'Inter', sans-serif"
+                  }}
+                >
                   {parish?.name}
                 </div>
 
-                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '24px', fontWeight: 800, color: primaryDark, margin: '0 0 12px 0', letterSpacing: '0.5px' }}>
+                <h2
+                  className="winner-card-title"
+                  style={{
+                    fontFamily: "'Playfair Display', Georgia, serif",
+                    fontWeight: 800,
+                    color: primaryDark,
+                    letterSpacing: '0.5px'
+                  }}
+                >
                   LỘC LỜI CHÚA
                 </h2>
 
-                <div style={{ display: 'flex', alignItems: 'center', width: '70%', margin: '0 auto 16px auto', gap: '8px' }}>
+                <div className="winner-card-divider-top" style={{ display: 'flex', alignItems: 'center', width: '70%', gap: '8px' }}>
                   <div style={{ height: '1px', flex: 1, background: `linear-gradient(to right, transparent, ${cardBorderColor}, transparent)` }}></div>
                   <span style={{ color: cardBorderColor, fontSize: '10px' }}>✦</span>
                   <div style={{ height: '1px', flex: 1, background: `linear-gradient(to left, transparent, ${cardBorderColor}, transparent)` }}></div>
                 </div>
 
-                <div style={{ fontSize: '12px', fontWeight: 800, color: getTextContrastColor(presetColors[0], wheel.theme_preset), background: presetColors[0], padding: '6px 16px', borderRadius: '20px', marginBottom: '20px', border: `1.5px solid ${cardBorderColor}`, textTransform: 'uppercase', letterSpacing: '1px', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
+                <div
+                  className="winner-card-badge"
+                  style={{
+                    fontWeight: 800,
+                    color: getTextContrastColor(presetColors[0], wheel.theme_preset),
+                    background: presetColors[0],
+                    borderRadius: '20px',
+                    border: `1.5px solid ${cardBorderColor}`,
+                    textTransform: 'uppercase',
+                    letterSpacing: '1px',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.1)'
+                  }}
+                >
                   {winnerBlessing.category}
                 </div>
 
-                <p className="text-serif" style={{ fontSize, lineHeight: '1.65', color: '#1A202C', fontStyle: 'italic', margin: '8px 0 12px 0', padding: '0 10px', fontWeight: 500 }}>
+                <p
+                  className="text-serif winner-card-scripture"
+                  style={{
+                    '--scripture-font-size': fontSize,
+                    fontSize: 'var(--scripture-font-size)',
+                    lineHeight: '1.65',
+                    color: '#1A202C',
+                    fontStyle: 'italic',
+                    padding: '0 10px',
+                    fontWeight: 500
+                  } as React.CSSProperties}
+                >
                   “ {winnerBlessing.text} ”
                 </p>
 
                 {winnerBlessing.quote && (
-                  <p className="text-serif" style={{ fontWeight: '700', fontSize: '14px', color: primaryDark, marginTop: '4px', marginBottom: '20px', fontStyle: 'italic' }}>
+                  <p
+                    className="text-serif winner-card-quote"
+                    style={{
+                      fontWeight: '700',
+                      color: primaryDark,
+                      fontStyle: 'italic'
+                    }}
+                  >
                     — {winnerBlessing.quote}
                   </p>
                 )}
 
-                <div style={{ height: '1px', width: '35%', background: `linear-gradient(to right, transparent, ${cardBorderColor}80, transparent)`, margin: '0 auto 16px auto' }}></div>
+                <div
+                  className="winner-card-divider-bottom"
+                  style={{
+                    height: '1px',
+                    width: '35%',
+                    background: `linear-gradient(to right, transparent, ${cardBorderColor}80, transparent)`
+                  }}
+                ></div>
 
-                <p style={{ fontSize: '11px', color: 'var(--color-text-dark)', fontWeight: '500', fontStyle: 'italic', lineHeight: '1.5', margin: 0, opacity: 0.85, whiteSpace: 'pre-line' }}>
-                  {parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
+                <p
+                  className="winner-card-greeting"
+                  style={{
+                    color: 'var(--color-text-dark)',
+                    fontWeight: '500',
+                    fontStyle: 'italic',
+                    lineHeight: '1.5',
+                    opacity: 0.85,
+                    whiteSpace: 'pre-line'
+                  }}
+                >
+                  {wheel.card_greeting || wheel.greeting || parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
                 </p>
               </div>
             </div>
@@ -2301,15 +2466,13 @@ export const ParishionerWheel: React.FC = () => {
           onClick={() => {
             window.location.href = window.location.origin + window.location.pathname;
           }}
+          className="shared-cta-btn"
           style={{
-            marginTop: '24px',
-            padding: '12px 28px',
             borderRadius: '30px',
             background: 'linear-gradient(135deg, #D8B43F 0%, #F59E0B 100%)',
             color: '#FFFFFF',
             border: `1.5px solid ${cardBorderColor}`,
             fontWeight: '800',
-            fontSize: '15px',
             boxShadow: '0 8px 20px rgba(216, 180, 63, 0.35)',
             cursor: 'pointer',
             display: 'inline-flex',
@@ -2323,17 +2486,16 @@ export const ParishionerWheel: React.FC = () => {
         </button>
 
         {/* Nút tải ảnh và copy chữ cho lộc được tặng */}
-        <div style={{ display: 'flex', gap: '12px', marginTop: '16px', width: '100%', maxWidth: '430px' }}>
+        <div className="shared-action-row" style={{ display: 'flex', width: '100%', maxWidth: '430px' }}>
           <button
             onClick={() => handleCopyBlessing(winnerBlessing.text, winnerBlessing.quote)}
+            className="shared-action-btn"
             style={{
               flex: 1,
-              height: '40px',
               borderRadius: '12px',
               background: '#FFFFFF',
               border: `1.5px solid ${primaryDark}`,
               color: primaryDark,
-              fontSize: '13px',
               fontWeight: '600',
               cursor: 'pointer',
               display: 'flex',
@@ -2407,7 +2569,7 @@ export const ParishionerWheel: React.FC = () => {
                   )}
                   <div style={{ height: '1px', width: '35%', background: `linear-gradient(to right, transparent, ${cardBorderColor}80, transparent)`, margin: '0 auto 16px auto' }}></div>
                   <p style={{ fontSize: '11px', color: 'var(--color-text-dark)', fontWeight: '500', fontStyle: 'italic', lineHeight: '1.5', margin: 0, opacity: 0.85, whiteSpace: 'pre-line' }}>
-                    {parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
+                    {wheel.card_greeting || wheel.greeting || parish?.greeting || 'Kính chúc quý cộng đoàn một năm mới bình an,\nđầy tràn ân sủng của Thiên Chúa!'}
                   </p>
                 </div>
               </div>
@@ -2416,13 +2578,12 @@ export const ParishionerWheel: React.FC = () => {
 
           <button
             onClick={handleDownloadPNG}
+            className="shared-action-btn"
             style={{
               flex: 1,
-              height: '40px',
               borderRadius: '12px',
               background: presetColors[0],
               color: getTextContrastColor(presetColors[0], wheel.theme_preset),
-              fontSize: '13px',
               fontWeight: '600',
               border: 'none',
               cursor: 'pointer',
@@ -2448,6 +2609,8 @@ export const ParishionerWheel: React.FC = () => {
   const pointerSize = isSmallScreen ? '36px' : '48px';
   const pointerRight = isSmallScreen ? '-12px' : '-16px';
 
+  const shouldShowAd = !isAdClosed && !(isMobile && showWinnerModal);
+
   return (
     <div
       className={wheel.theme_preset === 'christmas' ? 'public-layout theme-christmas-layout' : 'public-layout'}
@@ -2459,6 +2622,7 @@ export const ParishionerWheel: React.FC = () => {
         justifyContent: 'center',
         alignItems: 'center',
         padding: isSmallScreen ? '12px 0' : '32px 12px',
+        paddingBottom: shouldShowAd ? (isSmallScreen ? '68px' : '84px') : (isSmallScreen ? '12px' : '32px'),
         color: '#FFFFFF'
       }}
     >
@@ -2564,9 +2728,9 @@ export const ParishionerWheel: React.FC = () => {
                 overflow: 'hidden'
               }}
             >
-              {cachedLogoUrl || parish?.logo_url ? (
+              {cachedLogoUrl || wheel?.logo_url || parish?.logo_url ? (
                 <img 
-                  src={cachedLogoUrl || parish?.logo_url} 
+                  src={cachedLogoUrl || wheel?.logo_url || parish?.logo_url} 
                   alt={parish?.name} 
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                 />
@@ -2619,8 +2783,8 @@ export const ParishionerWheel: React.FC = () => {
               }}
             >
               {lockedBlessing
-                ? 'Bạn đã nhận Lộc Lời Chúa hôm nay. Mỗi người nhận một Lộc Thánh duy nhất.'
-                : wheel.description || 'Xin nhấn nút dưới đây để đón nhận ân sủng Lộc Lời Chúa dành riêng cho quý vị.'}
+                ? (wheel.locked_desc || 'Bạn đã nhận Lộc Lời Chúa hôm nay. Mỗi người nhận một Lộc Thánh duy nhất.')
+                : (wheel.description || 'Xin nhấn nút dưới đây để đón nhận ân sủng Lộc Lời Chúa dành riêng cho quý vị.')}
             </p>
           </header>
 
@@ -2765,9 +2929,21 @@ export const ParishionerWheel: React.FC = () => {
                     transition: 'transform 0.1s ease'
                   }}
                 >
-                  XEM LỘC
-                  <br />
-                  ĐÃ NHẬN
+                  {wheel.view_result_btn_text ? (
+                    wheel.view_result_btn_text.includes(' ') ? (
+                      <>
+                        {wheel.view_result_btn_text.split(' ').slice(0, Math.ceil(wheel.view_result_btn_text.split(' ').length / 2)).join(' ')}
+                        <br />
+                        {wheel.view_result_btn_text.split(' ').slice(Math.ceil(wheel.view_result_btn_text.split(' ').length / 2)).join(' ')}
+                      </>
+                    ) : wheel.view_result_btn_text
+                  ) : (
+                    <>
+                      XEM LỘC
+                      <br />
+                      ĐÃ NHẬN
+                    </>
+                  )}
                 </button>
               ) : (
                 <button
@@ -2807,7 +2983,9 @@ export const ParishionerWheel: React.FC = () => {
                     transition: 'transform 0.1s ease'
                   }}
                 >
-                  {isSpinning ? (isSmallScreen ? 'QUAY...' : 'ĐANG QUAY') : 'QUAY LỘC'}
+                  {isSpinning 
+                    ? (wheel.spinning_btn_text || (isSmallScreen ? 'QUAY...' : 'ĐANG QUAY')) 
+                    : (wheel.spin_btn_text || 'QUAY LỘC')}
                 </button>
               )}
             </div>
@@ -2841,7 +3019,7 @@ export const ParishionerWheel: React.FC = () => {
                 }}
               >
                 <Church size={16} style={{ color: getTextContrastColor(getThemeColors(wheel.theme_preset)[0], wheel.theme_preset) }} />
-                Xem lại Lộc Thánh của bạn
+                {wheel.recheck_btn_text || 'Xem lại Lộc Thánh của bạn'}
               </button>
             </div>
           )}
@@ -2871,7 +3049,7 @@ export const ParishionerWheel: React.FC = () => {
             title={isBgmMuted ? "Bật nhạc nền Thánh ca" : "Tắt nhạc nền"}
             style={{
               position: 'fixed',
-              bottom: '24px',
+              bottom: shouldShowAd ? '76px' : '24px',
               right: '24px',
               width: '46px',
               height: '46px',
@@ -2912,6 +3090,131 @@ export const ParishionerWheel: React.FC = () => {
             )}
           </button>
         </>
+      )}
+
+      {/* Footer Banner Promotion (Graceful footer banner) */}
+      {shouldShowAd && (
+        <div 
+          className="footer-ad-banner" 
+          style={{ 
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            width: '100%',
+            height: '56px',
+            background: 'rgba(8, 27, 21, 0.82)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            borderTop: `1.5px solid ${borderGold}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 900,
+            padding: '0 16px',
+            boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.2)'
+          }}
+        >
+          <div 
+            className="ad-content"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              width: '100%',
+              maxWidth: '800px',
+              fontSize: '12.5px'
+            }}
+          >
+            <img 
+              src="/logo-giochacho.webp" 
+              alt="Giờ Cha Chờ" 
+              style={{ 
+                width: '28px', 
+                height: '28px', 
+                borderRadius: '6px', 
+                objectFit: 'contain',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                flexShrink: 0
+              }} 
+            />
+            <span 
+              className="ad-text"
+              style={{
+                opacity: 0.9,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                fontWeight: 500,
+                color: '#FFF8E8'
+              }}
+            >
+              Giờ Cha Chờ: Tìm nhanh giờ Thánh Lễ &amp; Giờ Xưng Tội gần nhất.
+            </span>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+              <a
+                href="https://apps.apple.com/vn/app/gi%E1%BB%9D-cha-ch%E1%BB%9D/id6760563537"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ad-link-btn"
+                style={{ 
+                  fontSize: '12.5px', 
+                  fontWeight: '700', 
+                  color: 'var(--color-gold)', 
+                  textDecoration: 'none', 
+                  borderBottom: '1px solid var(--color-gold)', 
+                  whiteSpace: 'nowrap' 
+                }}
+              >
+                Tải iOS
+              </a>
+              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px' }}>|</span>
+              <a
+                href="https://play.google.com/store/apps/details?id=com.anonymous.churchfindernative&pcampaignid=web_share"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ad-link-btn"
+                style={{ 
+                  fontSize: '12.5px', 
+                  fontWeight: '700', 
+                  color: 'var(--color-gold)', 
+                  textDecoration: 'none', 
+                  borderBottom: '1px solid var(--color-gold)', 
+                  whiteSpace: 'nowrap' 
+                }}
+              >
+                Tải Android
+              </a>
+            </div>
+            <button 
+              onClick={() => {
+                localStorage.setItem('ad_closed_giochacho', 'true');
+                setIsAdClosed(true);
+              }} 
+              className="ad-close-btn" 
+              title="Đóng quảng cáo"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#FFFFFF',
+                opacity: 0.6,
+                cursor: 'pointer',
+                padding: '8px',
+                fontSize: '14px',
+                marginLeft: 'auto',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseOver={e => e.currentTarget.style.opacity = '1'}
+              onMouseOut={e => e.currentTarget.style.opacity = '0.6'}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

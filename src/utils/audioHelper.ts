@@ -10,16 +10,16 @@ export interface SfxOption {
 }
 
 export const BGM_OPTIONS: BgmOption[] = [
-  { id: 'schubert-ave-maria', name: 'Ave Maria (Schubert) - Piano', url: 'https://archive.org/download/100ClassicalMusicMasterpieces/1825%20Schubert%20-%20Ave%20Maria.mp3' },
+  { id: 'schubert-ave-maria', name: 'Ave Maria (Schubert) - Vocal/Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/6/6f/Franz_Schubert_-_Ellens_dritter_Gesang.oga' },
   { id: 'gounod-ave-maria', name: 'Ave Maria (Gounod) - Cello/Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/JOHN_MICHEL_CELLO-BACH_AVE_MARIA.ogg' },
-  { id: 'canon-in-d', name: 'Canon in D (Pachelbel) - Phụng vụ', url: 'https://archive.org/download/100ClassicalMusicMasterpieces/1698%20Pachelbel%20%2C%20Canon%20in%20D.mp3' },
+  { id: 'canon-in-d', name: 'Canon in D (Pachelbel) - Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/6/62/Pachelbel%27s_Canon.ogg' },
   { id: 'silent-night', name: 'Silent Night (Đêm Thánh) - Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Silent_Night_%28Kevin_MacLeod%29_%28ISRC_USUAN1100075%29.oga' },
   { id: 'jingle-bells', name: 'Jingle Bells (Chuông ngân) - Celesta', url: 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Jingle_Bells_%28Calm%29.ogg' },
-  { id: 'amazing-grace', name: 'Amazing Grace - Organ phụng vụ', url: 'https://archive.org/download/AmazingGrace-PianoHymn/Amazing%20Grace%20-%20piano%20hymn.mp3' },
+  { id: 'amazing-grace', name: 'Amazing Grace - Organ phụng vụ', url: 'https://upload.wikimedia.org/wikipedia/commons/8/88/Amazing_Grace-organ.ogg' },
   { id: 'church-bells-joy', name: 'Tiếng chuông giáo đường reo mừng', url: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Bells_of_St_Peter%27s%2C_Bebington.ogg' },
   { id: 'bach-cello-suite', name: 'Tĩnh niệm Lời Chúa - Cello Suite', url: 'https://upload.wikimedia.org/wikipedia/commons/2/2a/JOHN_MICHEL_CELLO-J.S.BACH_CELLO_SUITE_1_in_G_Prelude_BWV_1007.ogg' },
   { id: 'hallelujah-organ', name: 'Hallelujah Chorus - Hợp xướng', url: 'https://upload.wikimedia.org/wikipedia/commons/2/25/Handel_-_messiah_-_44_hallelujah.ogg' },
-  { id: 'morning-prayer', name: 'Kinh Nguyện Ban Mai - Hòa tấu', url: 'https://archive.org/download/100ClassicalMusicMasterpieces/1787%20Mozart%20%2C%20Eine%20kleine%20Nachtmusik%20%2C%201st%20movement.mp3' }
+  { id: 'morning-prayer', name: 'Kinh Nguyện Ban Mai - Hòa tấu', url: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Mozart_-_Eine_kleine_Nachtmusik_-_1._Allegro.ogg' }
 ];
 
 export const SPIN_SFX_OPTIONS: SfxOption[] = [

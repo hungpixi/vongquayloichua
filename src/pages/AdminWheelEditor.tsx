@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { dbService } from '../services/db';
 import { supabase } from '../services/supabaseClient';
 import type { Wheel, Blessing, SpinHistory } from '../services/db';
+import { compressImageFile } from '../utils/imageHelper';
 import {
   ArrowLeft,
   Save,
@@ -28,7 +29,11 @@ import {
   FileText,
   RotateCcw,
   Check,
-  X
+  X,
+  Copy,
+  Download,
+  QrCode,
+  Upload
 } from 'lucide-react';
 import {
   BGM_OPTIONS,
@@ -49,6 +54,7 @@ import {
   ST_JOSEPH_BLESSINGS,
   EUCHARIST_BLESSINGS
 } from '../utils/blessingsData';
+import { getProductionUrl, copyToClipboard } from '../utils/urlHelper';
 
 // Component vẽ hoa văn góc cho thiệp Lộc Lời Chúa dạng vector sắc nét
 const CornerOrnamentSVG: React.FC<{ style?: React.CSSProperties; isChristmas?: boolean }> = ({ style, isChristmas }) => {
@@ -222,6 +228,33 @@ export const AdminWheelEditor: React.FC = () => {
     setTimeout(() => setToast(null), 3000);
   }, [setToast]);
 
+  const downloadQRCode = async (url: string, filename: string) => {
+    try {
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.open(url, '_blank');
+        showToastMsg('Đã mở ảnh QR. Vui lòng nhấn giữ để tải/lưu ảnh!');
+        return;
+      }
+
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      showToastMsg('Đã tải ảnh QR Code về máy!');
+    } catch (err) {
+      console.error(err);
+      window.open(url, '_blank');
+      showToastMsg('Đã mở ảnh QR. Vui lòng nhấn giữ để tải/lưu ảnh!');
+    }
+  };
+
   const [wheel, setWheel] = useState<Wheel | null>(null);
   const [blessings, setBlessings] = useState<Blessing[]>([]);
   const [history, setHistory] = useState<SpinHistory[]>([]);
@@ -254,6 +287,14 @@ export const AdminWheelEditor: React.FC = () => {
   const [cardTextColor, setCardTextColor] = useState('');
   const [cardFontSize, setCardFontSize] = useState('16');
   const [cardGreeting, setCardGreeting] = useState('');
+  
+  const [logoUrl, setLogoUrl] = useState('');
+  const [spinBtnText, setSpinBtnText] = useState('QUAY LỘC');
+  const [spinningBtnText, setSpinningBtnText] = useState('ĐANG QUAY');
+  const [viewResultBtnText, setViewResultBtnText] = useState('XEM LỘC ĐÃ NHẬN');
+  const [recheckBtnText, setRecheckBtnText] = useState('Xem lại Lộc Thánh của bạn');
+  const [lockedDesc, setLockedDesc] = useState('Bạn đã nhận Lộc Lời Chúa hôm nay. Mỗi người nhận một Lộc Thánh duy nhất.');
+  const [customColors, setCustomColors] = useState('#EF4444,#10B981,#F59E0B,#3B82F6,#DDD6FE');
 
   // UI & Chế độ nhập liệu danh sách lộc
   const [editorMode, setEditorMode] = useState<'list' | 'bulk' | 'segment'>('list');
@@ -281,6 +322,7 @@ export const AdminWheelEditor: React.FC = () => {
   // Preview BGM
   const [isBgmPreviewPlaying, setIsBgmPreviewPlaying] = useState(false);
   const previewAudioRef = React.useRef<HTMLAudioElement | null>(null);
+  const previewPlayPromiseRef = React.useRef<Promise<void> | null>(null);
   const previewAudioContextRef = React.useRef<AudioContext | null>(null);
 
   // Textarea input format: Category | Quote | Text
@@ -354,6 +396,13 @@ export const AdminWheelEditor: React.FC = () => {
         setCardTextColor(parsed.cardTextColor ?? '');
         setCardFontSize(parsed.cardFontSize ?? '16');
         setCardGreeting(parsed.cardGreeting ?? '');
+        setLogoUrl(parsed.logoUrl ?? '');
+        setSpinBtnText(parsed.spinBtnText ?? 'QUAY LỘC');
+        setSpinningBtnText(parsed.spinningBtnText ?? 'ĐANG QUAY');
+        setViewResultBtnText(parsed.viewResultBtnText ?? 'XEM LỘC ĐÃ NHẬN');
+        setRecheckBtnText(parsed.recheckBtnText ?? 'Xem lại Lộc Thánh của bạn');
+        setLockedDesc(parsed.lockedDesc ?? 'Bạn đã nhận Lộc Lời Chúa hôm nay. Mỗi người nhận một Lộc Thánh duy nhất.');
+        setCustomColors(parsed.customColors ?? '#EF4444,#10B981,#F59E0B,#3B82F6,#DDD6FE');
         if (parsed.blessings) {
           setBlessings(parsed.blessings);
           const textLines = parsed.blessings.map((item: Blessing) => {
@@ -409,6 +458,13 @@ export const AdminWheelEditor: React.FC = () => {
         cardTextColor,
         cardFontSize,
         cardGreeting,
+        logoUrl,
+        spinBtnText,
+        spinningBtnText,
+        viewResultBtnText,
+        recheckBtnText,
+        lockedDesc,
+        customColors,
         blessings
       };
       localStorage.setItem(`vqlc_draft_${wheelId}`, JSON.stringify(draftData));
@@ -441,6 +497,13 @@ export const AdminWheelEditor: React.FC = () => {
     cardTextColor,
     cardFontSize,
     cardGreeting,
+    logoUrl,
+    spinBtnText,
+    spinningBtnText,
+    viewResultBtnText,
+    recheckBtnText,
+    lockedDesc,
+    customColors,
     blessings
   ]);
 
@@ -683,6 +746,14 @@ export const AdminWheelEditor: React.FC = () => {
       setCardTextColor(result.wheel.card_text_color || '');
       setCardFontSize(result.wheel.card_font_size || '16');
       setCardGreeting(result.wheel.card_greeting || '');
+      
+      setLogoUrl(result.wheel.logo_url || '');
+      setSpinBtnText(result.wheel.spin_btn_text || 'QUAY LỘC');
+      setSpinningBtnText(result.wheel.spinning_btn_text || 'ĐANG QUAY');
+      setViewResultBtnText(result.wheel.view_result_btn_text || 'XEM LỘC ĐÃ NHẬN');
+      setRecheckBtnText(result.wheel.recheck_btn_text || 'Xem lại Lộc Thánh của bạn');
+      setLockedDesc(result.wheel.locked_desc || 'Bạn đã nhận Lộc Lời Chúa hôm nay. Mỗi người nhận một Lộc Thánh duy nhất.');
+      setCustomColors(result.wheel.custom_colors || '#EF4444,#10B981,#F59E0B,#3B82F6,#DDD6FE');
 
       const items = await dbService.getBlessings(wheelId);
       setBlessings(items);
@@ -716,30 +787,39 @@ export const AdminWheelEditor: React.FC = () => {
     return () => clearTimeout(timer);
   }, [user, navigate, fetchWheelData]);
 
-  // Theme presets helper matching the public view
   const getThemeColors = (preset: string) => {
+    if (preset === 'custom' && customColors) {
+      const parsed = customColors.split(',').map(c => c.trim()).filter(c => /^#[0-9A-F]{6}$/i.test(c));
+      if (parsed.length > 0) {
+        const paddedColors = [...parsed];
+        while (paddedColors.length < 6) {
+          paddedColors.push(...parsed);
+        }
+        return paddedColors;
+      }
+    }
     switch (preset) {
-      case 'christmas': // Giáng Sinh: Đỏ Crimson sẫm, Xanh lá thông cổ điển, Vàng Gold sang, Trắng kem tuyết, Xanh dương đêm, Đỏ Crimson sẫm hơn
-        return ['#A81D22', '#0D4A30', '#D4A33B', '#F7F7F7', '#0F2C59', '#7A0E12'];
-      case 'tet': // Tết Nguyên Đán: Đỏ cờ hội, Vàng Hoàng kim nhạt, Hồng Đào ấm, Trắng kem sữa, Cam quýt ngọt, Đỏ cờ hội sẫm
-        return ['#B81D24', '#E5A93B', '#F3A0A7', '#FFFDF2', '#D96B27', '#8A1015'];
-      case 'easter': // Phục Sinh: Vàng nắng sớm, Trắng huệ thanh sạch, Vàng pastel dịu, Xanh lá non, Tím Phục Sinh vương giả, Vàng pastel dịu hơn
-        return ['#E5B82B', '#FFFFFF', '#FFF3CD', '#6FCF97', '#9B51E0', '#FFEAA7'];
-      case 'pentecost': // Hiện Xuống (7 Ơn): Đỏ lửa rực, Cam lửa ấm, Vàng hoa cúc, Trắng kem gió thánh, Cam đỏ, Đỏ lửa rực sẫm
-        return ['#C0392B', '#D35400', '#F39C12', '#FFFDF5', '#E65100', '#901E13'];
-      case 'lent': // Mùa Chay: Tím phụng vụ trầm, Tím sẫm hối cải, Oải hương tro buồn, Xám tro bụi, Tím hoa cà sẫm, Tím hối cải cực sẫm
-        return ['#5B21B6', '#4C1D95', '#A78BFA', '#9CA3AF', '#D1C4E9', '#3B127D'];
-      case 'advent': // Mùa Vọng: Tím hoa cà đậm, Hồng Gaudete, Tím vương quyền, Xanh hy vọng, Hồng nhạt, Tím hoa cà cực sẫm
-        return ['#581C56', '#EC4899', '#4A044E', '#047857', '#C084FC', '#380436'];
-      case 'marian': // Đức Mẹ: Xanh trời dịu mát, Trắng dâng Mẹ tinh tuyền, Xanh Navy sâu thẳm, Xanh ngọc nhẹ, Vàng ánh dương, Xanh Navy cực sẫm
-        return ['#1E65A7', '#FFFFFF', '#1D3557', '#A8DADC', '#E9C46A', '#153A64'];
-      case 'joseph': // Thánh Giuse: Nâu đất sét, Nâu gỗ óc chó, Vàng rơm nhạt, Trắng sữa cổ điển, Xanh thợ mộc, Nâu gỗ óc chó cực sẫm
-        return ['#704F37', '#5C3A21', '#D2B48C', '#FDF5E6', '#1E5E4E', '#4E342E'];
-      case 'eucharist': // Thánh Thể: Vàng đồng cổ, Trắng ngà Mình Thánh, Vàng bánh thánh, Vàng đồng sáng, Đỏ rượu vang cực sẫm
-        return ['#B8860B', '#FFFFFA', '#CD7F32', '#FFD700', '#FF8F00', '#5E0000'];
-      case 'gold': // Cổ Điển (Default)
+      case 'christmas': // Giáng Sinh: Đỏ và Xanh Noel tươi sáng, Vàng kim rực rỡ, Trắng tuyết
+        return ['#EF4444', '#10B981', '#F59E0B', '#FFFFFF', '#3B82F6', '#DC2626'];
+      case 'tet': // Tết Nguyên Đán: Đỏ tươi xuân, Vàng Hoàng kim nhạt, Hồng Đào ấm, Cam quýt ngọt
+        return ['#FF4D4D', '#FFB703', '#FF85A2', '#FFFDF2', '#FF7A00', '#D90429'];
+      case 'easter': // Phục Sinh: Vàng nắng sớm, Trắng huệ, Xanh lá non, Tím Phục Sinh vương giả
+        return ['#FBBF24', '#FFFFFF', '#FEF3C7', '#4ADE80', '#A78BFA', '#FFFBEB'];
+      case 'pentecost': // Hiện Xuống (7 Ơn): Đỏ lửa rực, Cam lửa ấm, Vàng hoa cúc, Trắng kem gió thánh
+        return ['#FF3B30', '#FF9500', '#FFCC00', '#FFFDF5', '#FF5E00', '#E63946'];
+      case 'lent': // Mùa Chay: Tím phụng vụ trầm, Oải hương nhạt, Xám tro bụi
+        return ['#8B5CF6', '#6D28D9', '#C084FC', '#E5E7EB', '#DDD6FE', '#5B21B6'];
+      case 'advent': // Mùa Vọng: Tím hoa cà đậm, Hồng Gaudete, Tím vương quyền, Xanh hy vọng
+        return ['#A855F7', '#EC4899', '#7C3AED', '#10B981', '#F472B6', '#6B21A8'];
+      case 'marian': // Đức Mẹ: Xanh trời dịu mát, Trắng dâng Mẹ tinh tuyền, Xanh Navy sâu thẳm, Xanh ngọc nhẹ
+        return ['#3B82F6', '#FFFFFF', '#1D4ED8', '#60A5FA', '#FBBF24', '#1E40AF'];
+      case 'joseph': // Thánh Giuse: Nâu đất sét, Nâu gỗ óc chó, Vàng rơm nhạt, Trắng sữa, Xanh thợ mộc
+        return ['#B45309', '#854D0E', '#FBBF24', '#FFFDF9', '#059669', '#78350F'];
+      case 'eucharist': // Thánh Thể: Vàng Mình Thánh Chúa rực rỡ, Trắng Mình Thánh, Đỏ rượu nho
+        return ['#F59E0B', '#FFFFFA', '#D97706', '#FCD34D', '#EF4444', '#B45309'];
+      case 'gold': // Cổ Điển / Mặc Định: Ngọc lục bảo & Vàng kim cao cấp
       default:
-        return ['#0E3A2F', '#D4AF37', '#1E5E4E', '#FFFBF0', '#164E3E', '#08251E'];
+        return ['#059669', '#F59E0B', '#34D399', '#FFFDF5', '#047857', '#065F46'];
     }
   };
 
@@ -949,30 +1029,59 @@ export const AdminWheelEditor: React.FC = () => {
     ctx.fill();
   }, [previewSegments, themePreset, displaySlots, slotDisplayType, rotationAngle]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Dung lượng ảnh quá lớn! Vui lòng chọn ảnh dưới 2MB để đảm bảo tốc độ tải trang.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Dung lượng ảnh quá lớn! Vui lòng chọn ảnh dưới 10MB.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setBackgroundUrl(event.target.result as string);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageFile(file, 2048, 2048, 0.82);
+      setBackgroundUrl(compressed);
+    } catch (err) {
+      console.error('Lỗi nén ảnh nền:', err);
+      alert('Không thể xử lý tệp ảnh này.');
+    }
+  };
+
+  const handleWheelLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Dung lượng ảnh logo quá lớn! Vui lòng chọn ảnh dưới 10MB.');
+      return;
+    }
+
+    try {
+      const compressed = await compressImageFile(file, 512, 512, 0.88);
+      setLogoUrl(compressed);
+    } catch (err) {
+      console.error('Lỗi nén logo vòng quay:', err);
+      alert('Không thể xử lý tệp ảnh này.');
+    }
   };
 
   // DIY Audio Handlers
   useEffect(() => {
     return () => {
-      if (previewAudioRef.current) {
+      if (previewPlayPromiseRef.current) {
+        previewPlayPromiseRef.current
+          .then(() => {
+            if (previewAudioRef.current) {
+              previewAudioRef.current.pause();
+            }
+          })
+          .catch(() => {
+            if (previewAudioRef.current) {
+              previewAudioRef.current.pause();
+            }
+          });
+      } else if (previewAudioRef.current) {
         previewAudioRef.current.pause();
-        previewAudioRef.current = null;
       }
       if (previewAudioContextRef.current) {
         previewAudioContextRef.current.close().catch(e => console.warn(e));
@@ -981,15 +1090,39 @@ export const AdminWheelEditor: React.FC = () => {
     };
   }, []);
 
-  const toggleBgmPreview = async () => {
-    if (isBgmPreviewPlaying) {
-      if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
-      }
+  const safePausePreview = React.useCallback(() => {
+    if (previewPlayPromiseRef.current) {
+      previewPlayPromiseRef.current
+        .then(() => {
+          if (previewAudioRef.current) {
+            previewAudioRef.current.pause();
+          }
+          setIsBgmPreviewPlaying(false);
+        })
+        .catch(() => {
+          if (previewAudioRef.current) {
+            previewAudioRef.current.pause();
+          }
+          setIsBgmPreviewPlaying(false);
+        });
+    } else if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
       setIsBgmPreviewPlaying(false);
     } else {
+      setIsBgmPreviewPlaying(false);
+    }
+  }, []);
+
+  const toggleBgmPreview = async () => {
+    const audio = previewAudioRef.current;
+    if (isBgmPreviewPlaying || (audio && !audio.paused) || previewPlayPromiseRef.current) {
+      safePausePreview();
+    } else {
+      if (previewPlayPromiseRef.current) return;
+
       if (previewAudioRef.current) {
         previewAudioRef.current.pause();
+        previewAudioRef.current = null;
       }
 
       let audioUrl: string;
@@ -1022,18 +1155,33 @@ export const AdminWheelEditor: React.FC = () => {
         audioUrl = activeOption.url;
       }
 
-      const audio = new Audio(audioUrl);
-      audio.volume = bgmVolume;
-      audio.loop = true;
-      audio.onended = () => setIsBgmPreviewPlaying(false);
+      const newAudio = new Audio(audioUrl);
+      newAudio.volume = bgmVolume;
+      newAudio.loop = true;
+      newAudio.onended = () => setIsBgmPreviewPlaying(false);
+      newAudio.onerror = (e) => {
+        console.error('Audio loading error:', e);
+        setIsBgmPreviewPlaying(false);
+      };
 
-      previewAudioRef.current = audio;
-      audio.play()
-        .then(() => setIsBgmPreviewPlaying(true))
-        .catch(err => {
-          console.error('BGM play failed:', err);
-          alert('Không thể phát thử bài nhạc này. Vui lòng kiểm tra file nhạc hoặc kết nối.');
-        });
+      previewAudioRef.current = newAudio;
+      const promise = newAudio.play();
+      if (promise !== undefined) {
+        previewPlayPromiseRef.current = promise;
+        promise
+          .then(() => {
+            previewPlayPromiseRef.current = null;
+            setIsBgmPreviewPlaying(true);
+          })
+          .catch(err => {
+            previewPlayPromiseRef.current = null;
+            setIsBgmPreviewPlaying(false);
+            if (err.name !== 'AbortError') {
+              console.error('BGM play failed:', err);
+              alert('Không thể phát thử bài nhạc này. Vui lòng kiểm tra file nhạc hoặc kết nối.');
+            }
+          });
+      }
     }
   };
 
@@ -1440,7 +1588,14 @@ export const AdminWheelEditor: React.FC = () => {
         card_template: cardTemplate,
         card_text_color: cardTextColor,
         card_font_size: cardFontSize,
-        card_greeting: cardGreeting
+        card_greeting: cardGreeting,
+        logo_url: logoUrl,
+        spin_btn_text: spinBtnText,
+        spinning_btn_text: spinningBtnText,
+        view_result_btn_text: viewResultBtnText,
+        recheck_btn_text: recheckBtnText,
+        locked_desc: lockedDesc,
+        custom_colors: customColors
       });
 
       // 2. Format và lưu blessings
@@ -1479,7 +1634,14 @@ export const AdminWheelEditor: React.FC = () => {
             card_template: cardTemplate,
             card_text_color: cardTextColor,
             card_font_size: cardFontSize,
-            card_greeting: cardGreeting
+            card_greeting: cardGreeting,
+            logo_url: logoUrl,
+            spin_btn_text: spinBtnText,
+            spinning_btn_text: spinningBtnText,
+            view_result_btn_text: viewResultBtnText,
+            recheck_btn_text: recheckBtnText,
+            locked_desc: lockedDesc,
+            custom_colors: customColors
           },
           blessings: parsedBlessingsList
         };
@@ -1732,6 +1894,7 @@ export const AdminWheelEditor: React.FC = () => {
                     onChange={(e) => setThemePreset(e.target.value)}
                     style={{ height: '40px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
                   >
+                    <option value="custom">🎨 Tự thiết lập màu sắc (Tùy biến)</option>
                     <option value="gold">Cổ Điển (Xanh phụng vụ & Vàng đồng)</option>
                     <option value="tet">Tết Nguyên Đán (Đỏ, Vàng, Hồng đào)</option>
                     <option value="christmas">Giáng Sinh (Đỏ, Xanh lá, Vàng, Trắng)</option>
@@ -1857,6 +2020,69 @@ export const AdminWheelEditor: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Logo riêng Vòng Quay */}
+                <div className="form-group" style={{ gridColumn: 'span 2', borderTop: '1px dashed rgba(15, 61, 46, 0.08)', paddingTop: '16px' }}>
+                  <label style={{ color: 'var(--color-primary)', fontWeight: '600' }}>Logo riêng Vòng Quay (Ghi đè Logo của Giáo xứ)</label>
+                  {logoUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', backgroundColor: 'rgba(15, 61, 46, 0.03)', padding: '12px', borderRadius: '10px', border: '1.5px solid rgba(15, 61, 46, 0.1)' }}>
+                      <div style={{ width: '60px', height: '60px', borderRadius: '50%', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)', backgroundColor: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <img src={logoUrl} alt="Wheel Logo Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: '600' }}>Đang sử dụng logo riêng</span>
+                        <button
+                          type="button"
+                          onClick={() => setLogoUrl('')}
+                          className="btn btn-danger"
+                          style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                        >
+                          <Trash2 size={12} />
+                          <span>Xóa logo này</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <input
+                        id="wheel-logo-file"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleWheelLogoFileChange}
+                        style={{ display: 'none' }}
+                      />
+                      <label
+                        htmlFor="wheel-logo-file"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          border: '1.5px dashed rgba(15, 61, 46, 0.25)',
+                          borderRadius: '10px',
+                          padding: '16px',
+                          cursor: 'pointer',
+                          backgroundColor: 'rgba(15, 61, 46, 0.02)',
+                          transition: 'all 0.2s',
+                          textAlign: 'center'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = 'var(--color-gold)';
+                          e.currentTarget.style.backgroundColor = 'rgba(216, 180, 63, 0.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(15, 61, 46, 0.25)';
+                          e.currentTarget.style.backgroundColor = 'rgba(15, 61, 46, 0.02)';
+                        }}
+                      >
+                        <Upload size={18} style={{ color: 'var(--color-gold)' }} />
+                        <span style={{ fontSize: '13.5px', color: 'var(--color-primary)', fontWeight: '600' }}>
+                          Tải logo riêng lên cho vòng quay này (Ghi đè logo chung)
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="form-group" style={{ marginTop: '12px' }}>
@@ -1898,7 +2124,7 @@ export const AdminWheelEditor: React.FC = () => {
             <div className="card" style={{ border: '1px solid rgba(216, 180, 63, 0.25)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.04)' }}>
               <h3 className="text-serif" style={{ fontSize: '16px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(15, 61, 46, 0.08)', paddingBottom: '10px', marginBottom: '16px', fontWeight: '800' }}>
                 <Volume2 size={18} style={{ color: 'var(--color-gold)' }} />
-                <span>Thiết lập Âm thanh & Nhạc nền DIY</span>
+                <span>Thiết lập Âm thanh & Nhạc nền Vòng Quay</span>
               </h3>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -1930,12 +2156,7 @@ export const AdminWheelEditor: React.FC = () => {
                             value={bgmType}
                             onChange={(e) => {
                               setBgmType(e.target.value);
-                              if (isBgmPreviewPlaying) {
-                                setIsBgmPreviewPlaying(false);
-                                if (previewAudioRef.current) {
-                                  previewAudioRef.current.pause();
-                                }
-                              }
+                              safePausePreview();
                             }}
                             style={{ height: '40px', border: '1.5px solid rgba(15, 61, 46, 0.15)', flex: 1 }}
                           >
@@ -2160,6 +2381,132 @@ export const AdminWheelEditor: React.FC = () => {
                         )}
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Labels & Color Palette Card */}
+            <div className="card" style={{ border: '1px solid rgba(216, 180, 63, 0.25)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.04)' }}>
+              <h3 className="text-serif" style={{ fontSize: '16px', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(15, 61, 46, 0.08)', paddingBottom: '10px', marginBottom: '16px', fontWeight: '800' }}>
+                <Settings size={18} style={{ color: 'var(--color-gold)' }} />
+                <span>Cấu hình nhãn chữ & Màu sắc Tùy biến</span>
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Custom Colors Option (Only shown if themePreset is 'custom') */}
+                {themePreset === 'custom' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '16px', borderBottom: '1px dashed rgba(15, 61, 46, 0.08)' }}>
+                    <label style={{ color: 'var(--color-primary)', fontWeight: '700', fontSize: '14px' }}>🎨 Danh sách mã màu tùy biến (Hex, cách nhau bằng dấu phẩy)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={customColors}
+                      onChange={(e) => setCustomColors(e.target.value)}
+                      placeholder="#EF4444,#10B981,#F59E0B,#3B82F6"
+                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', height: '40px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', width: '100%', fontWeight: '600' }}>Gợi ý các bảng màu tươi sáng & hiện đại:</span>
+                      <button
+                        type="button"
+                        onClick={() => setCustomColors('#FF5E36,#FFAE33,#E24E82,#7C3AED,#3B82F6')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
+                      >
+                        🌅 Hoàng hôn rực rỡ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomColors('#0D9488,#14B8A6,#06B6D4,#3B82F6,#6366F1')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
+                      >
+                        💎 Ngọc lục bảo mát lạnh
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomColors('#F472B6,#FBBF24,#34D399,#60A5FA,#A78BFA')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
+                      >
+                        🌸 Hoa cỏ mùa xuân (Pastel)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomColors('#EC4899,#8B5CF6,#3B82F6,#10B981,#F59E0B')}
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '6px 10px', border: '1.5px solid rgba(216, 180, 63, 0.3)', cursor: 'pointer' }}
+                      >
+                        ⚡ Neon tương phản
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Spin center buttons text customize */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', paddingBottom: '16px', borderBottom: '1px dashed rgba(15, 61, 46, 0.08)' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ color: 'var(--color-primary)', fontWeight: '600', fontSize: '13px' }}>Chữ nút Quay (Chưa quay)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={spinBtnText}
+                      onChange={(e) => setSpinBtnText(e.target.value)}
+                      placeholder="QUAY LỘC"
+                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', height: '38px', fontSize: '13px' }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ color: 'var(--color-primary)', fontWeight: '600', fontSize: '13px' }}>Chữ nút Quay (Đang quay)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={spinningBtnText}
+                      onChange={(e) => setSpinningBtnText(e.target.value)}
+                      placeholder="ĐANG QUAY"
+                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', height: '38px', fontSize: '13px' }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ color: 'var(--color-primary)', fontWeight: '600', fontSize: '13px' }}>Chữ nút ở giữa khi đã quay</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={viewResultBtnText}
+                      onChange={(e) => setViewResultBtnText(e.target.value)}
+                      placeholder="XEM LỘC ĐÃ NHẬN"
+                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', height: '38px', fontSize: '13px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Footer and message lock customize */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ color: 'var(--color-primary)', fontWeight: '600', fontSize: '13px' }}>Chữ nút "Xem lại Lộc Thánh của bạn" dưới vòng quay</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={recheckBtnText}
+                      onChange={(e) => setRecheckBtnText(e.target.value)}
+                      placeholder="Xem lại Lộc Thánh của bạn"
+                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', height: '38px', fontSize: '13px' }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label style={{ color: 'var(--color-primary)', fontWeight: '600', fontSize: '13px' }}>Thông báo phụ khi giáo dân đã quay xong</label>
+                    <textarea
+                      className="form-control"
+                      value={lockedDesc}
+                      onChange={(e) => setLockedDesc(e.target.value)}
+                      placeholder="Bạn đã nhận Lộc Lời Chúa hôm nay. Mỗi người nhận một Lộc Thánh duy nhất."
+                      rows={2}
+                      style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', padding: '8px', fontSize: '13px', resize: 'vertical' }}
+                    />
                   </div>
                 </div>
               </div>
@@ -2985,36 +3332,93 @@ export const AdminWheelEditor: React.FC = () => {
             </div>
 
             {/* Short info / Share Card */}
-            <div className="card" style={{ background: 'var(--color-primary)', color: '#FFFFFF', border: '2px double var(--color-gold)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.15)', position: 'relative' }}>
-              <div className="corner-ornament top-left" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', top: '8px', left: '8px' }}></div>
-              <div className="corner-ornament top-right" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', top: '8px', right: '8px' }}></div>
-              <div className="corner-ornament bottom-left" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', bottom: '8px', left: '8px' }}></div>
-              <div className="corner-ornament bottom-right" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', bottom: '8px', right: '8px' }}></div>
+            {(() => {
+              const productionUrl = getProductionUrl();
+              const encodedParishSlug = encodeURIComponent(parish?.slug || '');
+              const encodedWheelSlug = encodeURIComponent(slug || '');
+              const wheelUrl = `${productionUrl}/giao-xu/${encodedParishSlug}/vong-quay/${encodedWheelSlug}`;
+              const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(wheelUrl)}`;
+              return (
+                <div className="card" style={{ background: 'var(--color-primary)', color: '#FFFFFF', border: '2px double var(--color-gold)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.15)', position: 'relative' }}>
+                  <div className="corner-ornament top-left" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', top: '8px', left: '8px' }}></div>
+                  <div className="corner-ornament top-right" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', top: '8px', right: '8px' }}></div>
+                  <div className="corner-ornament bottom-left" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', bottom: '8px', left: '8px' }}></div>
+                  <div className="corner-ornament bottom-right" style={{ borderColor: 'var(--color-gold)', width: '8px', height: '8px', bottom: '8px', right: '8px' }}></div>
 
-              <h3 className="text-serif" style={{ fontSize: '18px', color: 'var(--color-gold)', marginBottom: '8px', fontWeight: '800' }}>Đường Dẫn Chia Sẻ Giáo Dân</h3>
-              <p style={{ fontSize: '12.5px', opacity: 0.85, lineHeight: '1.6', marginBottom: '16px' }}>
-                Giáo dân quét mã QR hoặc truy cập đường dẫn này để nhận Lộc Lời Chúa. Bạn có thể sao chép liên kết hoặc in mã QR.
-              </p>
+                  <h3 className="text-serif" style={{ fontSize: '18px', color: 'var(--color-gold)', marginBottom: '8px', fontWeight: '800' }}>Đường Dẫn Chia Sẻ Giáo Dân</h3>
+                  <p style={{ fontSize: '12.5px', opacity: 0.85, lineHeight: '1.6', marginBottom: '16px' }}>
+                    Giáo dân quét mã QR hoặc truy cập đường dẫn này để nhận Lộc Lời Chúa. Bạn có thể sao chép liên kết hoặc in mã QR.
+                  </p>
 
-              <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', padding: '12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontFamily: 'monospace' }}>
-                <div>Friendly URL:</div>
-                <div style={{ color: 'var(--color-gold)', wordBreak: 'break-all' }}>
-                  {`/giao-xu/${parish?.slug}/vong-quay/${slug}`}
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+                    <div style={{
+                      width: '160px',
+                      height: '160px',
+                      border: '2.5px double var(--color-gold)',
+                      borderRadius: '12px',
+                      padding: '8px',
+                      backgroundColor: '#FFFFFF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    }}>
+                      <img
+                        src={qrUrl}
+                        alt={`Mã QR ${title}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', padding: '12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px', fontFamily: 'monospace' }}>
+                    <div>Friendly URL:</div>
+                    <div style={{ color: 'var(--color-gold)', wordBreak: 'break-all' }}>
+                      {wheelUrl}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '16px' }}>
+                    <button
+                      onClick={() => downloadQRCode(qrUrl, `qr-${slug}.png`)}
+                      className="btn btn-gold"
+                      style={{ fontSize: '13px', padding: '8px 12px', width: '100%', gap: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                    >
+                      <Download size={14} />
+                      Tải ảnh QR Code
+                    </button>
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={async () => {
+                          const success = await copyToClipboard(wheelUrl);
+                          if (success) {
+                            showToastMsg('Đã sao chép liên kết!');
+                          } else {
+                            showToastMsg('Không thể tự động sao chép.');
+                          }
+                        }}
+                        className="btn btn-secondary"
+                        style={{ flex: 1, fontSize: '12px', padding: '8px 12px', gap: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#FFFFFF' }}
+                      >
+                        <Copy size={13} />
+                        Sao chép liên kết
+                      </button>
+
+                      <a
+                        href={`/giao-xu/${encodedParishSlug}/vong-quay/${encodedWheelSlug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-gold"
+                        style={{ flex: 1, fontSize: '12px', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
+                      >
+                        Kiểm tra trang Quay
+                      </a>
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
-                <a
-                  href={`/giao-xu/${parish?.slug}/vong-quay/${slug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-gold"
-                  style={{ width: '100%', fontSize: '13px', padding: '8px 12px' }}
-                >
-                  Kiểm tra trang Quay
-                </a>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Spin History Card */}
             <div className="card" style={{ border: '1px solid rgba(216, 180, 63, 0.25)', boxShadow: '0 8px 24px rgba(15, 61, 46, 0.04)' }}>
@@ -3195,7 +3599,7 @@ export const AdminWheelEditor: React.FC = () => {
 
       {/* Toast notifications */}
       {toast && (
-        <div className="toast-notification">
+        <div className="toast-notification" role="status" aria-live="polite">
           {toast}
         </div>
       )}

@@ -38,6 +38,8 @@ import {
   ST_JOSEPH_BLESSINGS,
   EUCHARIST_BLESSINGS
 } from '../utils/blessingsData';
+import { compressImageFile } from '../utils/imageHelper';
+import { getProductionUrl, copyToClipboard } from '../utils/urlHelper';
 
 const FacebookIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({ size = 16, style, className }) => (
   <svg
@@ -402,6 +404,13 @@ export const AdminDashboard: React.FC = () => {
 
   const downloadQRCode = async (url: string, filename: string) => {
     try {
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.open(url, '_blank');
+        showToastMsg('Đã mở ảnh QR. Vui lòng nhấn giữ để tải/lưu ảnh!');
+        return;
+      }
+
       const response = await fetch(url);
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -416,6 +425,7 @@ export const AdminDashboard: React.FC = () => {
     } catch (err) {
       console.error(err);
       window.open(url, '_blank');
+      showToastMsg('Đã mở ảnh QR. Vui lòng nhấn giữ để tải/lưu ảnh!');
     }
   };
 
@@ -759,11 +769,16 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleCopyLink = (wheelSlug: string) => {
+  const handleCopyLink = async (wheelSlug: string) => {
     if (!parish) return;
-    const url = `${window.location.origin}/giao-xu/${parish.slug}/vong-quay/${wheelSlug}`;
-    navigator.clipboard.writeText(url);
-    showToastMsg('Đã sao chép liên kết vòng quay!');
+    const productionUrl = getProductionUrl();
+    const url = `${productionUrl}/giao-xu/${encodeURIComponent(parish.slug)}/vong-quay/${encodeURIComponent(wheelSlug)}`;
+    const success = await copyToClipboard(url);
+    if (success) {
+      showToastMsg('Đã sao chép liên kết vòng quay!');
+    } else {
+      showToastMsg('Không thể tự động sao chép.');
+    }
   };
 
   const handleUpdateParish = async (e: React.FormEvent) => {
@@ -813,40 +828,40 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Dung lượng ảnh logo quá lớn! Vui lòng chọn ảnh dưới 2MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Dung lượng ảnh logo quá lớn! Vui lòng chọn ảnh dưới 10MB.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setParishLogo(event.target.result as string);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageFile(file, 512, 512, 0.88);
+      setParishLogo(compressed);
+    } catch (err) {
+      console.error('Lỗi nén logo:', err);
+      alert('Không thể xử lý tệp ảnh này.');
+    }
   };
 
-  const handleBackgroundFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBackgroundFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 3 * 1024 * 1024) {
-      alert('Dung lượng ảnh nền quá lớn! Vui lòng chọn ảnh dưới 3MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Dung lượng ảnh nền quá lớn! Vui lòng chọn ảnh dưới 10MB.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setParishBackground(event.target.result as string);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageFile(file, 2048, 2048, 0.82);
+      setParishBackground(compressed);
+    } catch (err) {
+      console.error('Lỗi nén ảnh nền:', err);
+      alert('Không thể xử lý tệp ảnh này.');
+    }
   };
 
   // Mass Schedule widget handlers
@@ -1368,7 +1383,7 @@ export const AdminDashboard: React.FC = () => {
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                           <Link to={`/admin/wheel/${wheel.id}`} className="btn btn-secondary" style={{ fontSize: '13px', padding: '8px 16px', gap: '6px' }}>
                             <Settings size={14} />
-                            Cấu hình DIY
+                            Cấu hình vòng quay
                           </Link>
 
                           <button onClick={() => handleCopyLink(wheel.slug)} className="btn btn-secondary" style={{ fontSize: '13px', padding: '8px 16px', gap: '6px' }} title="Sao chép liên kết giáo dân">
@@ -2301,7 +2316,10 @@ export const AdminDashboard: React.FC = () => {
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
                         {wheels.map((w) => {
-                          const wheelUrl = `${window.location.origin}/giao-xu/${parish?.slug}/vong-quay/${w.slug}`;
+                          const productionUrl = getProductionUrl();
+                          const encodedParishSlug = encodeURIComponent(parish?.slug || '');
+                          const encodedWheelSlug = encodeURIComponent(w.slug || '');
+                          const wheelUrl = `${productionUrl}/giao-xu/${encodedParishSlug}/vong-quay/${encodedWheelSlug}`;
                           const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(wheelUrl)}`;
                           return (
                             <div
@@ -2354,9 +2372,13 @@ export const AdminDashboard: React.FC = () => {
                                 
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                   <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(wheelUrl);
-                                      showToastMsg('Đã sao chép liên kết!');
+                                    onClick={async () => {
+                                      const success = await copyToClipboard(wheelUrl);
+                                      if (success) {
+                                        showToastMsg('Đã sao chép liên kết!');
+                                      } else {
+                                        showToastMsg('Không thể tự động sao chép.');
+                                      }
                                     }}
                                     className="btn btn-secondary"
                                     style={{ fontSize: '12px', padding: '8px 0', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
@@ -2699,7 +2721,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Toast popup */}
       {toast && (
-        <div className="toast-notification">
+        <div className="toast-notification" role="status" aria-live="polite">
           {toast}
         </div>
       )}

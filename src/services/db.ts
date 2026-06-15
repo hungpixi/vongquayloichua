@@ -51,6 +51,8 @@ export interface Wheel {
   created_at?: string;
   updated_at?: string;
   background_url?: string;
+  logo_url?: string;
+  custom_colors?: string;
   address?: string;
   phone?: string;
   facebook_url?: string;
@@ -70,6 +72,11 @@ export interface Wheel {
   card_text_color?: string;
   card_font_size?: string;
   card_greeting?: string;
+  spin_btn_text?: string;
+  spinning_btn_text?: string;
+  view_result_btn_text?: string;
+  recheck_btn_text?: string;
+  locked_desc?: string;
 }
 
 export interface Blessing {
@@ -887,7 +894,7 @@ export const dbService = {
          'mass_schedule', 'greeting', 'bgm_enabled', 'bgm_type', 'bgm_volume',
          'spin_sfx_type', 'win_sfx_type', 'custom_bgm_url', 'custom_win_sfx_url',
          'display_slots', 'slot_display_type', 'card_template', 'card_text_color',
-         'card_font_size', 'card_greeting'
+         'card_font_size', 'card_greeting', 'spin_btn_text', 'spinning_btn_text', 'view_result_btn_text', 'recheck_btn_text', 'locked_desc', 'logo_url', 'custom_colors'
        ];
        const config: Record<string, unknown> = {
          enable_confetti: true,
@@ -969,7 +976,7 @@ export const dbService = {
          'mass_schedule', 'greeting', 'bgm_enabled', 'bgm_type', 'bgm_volume',
          'spin_sfx_type', 'win_sfx_type', 'custom_bgm_url', 'custom_win_sfx_url',
          'display_slots', 'slot_display_type', 'card_template', 'card_text_color',
-         'card_font_size', 'card_greeting'
+         'card_font_size', 'card_greeting', 'spin_btn_text', 'spinning_btn_text', 'view_result_btn_text', 'recheck_btn_text', 'locked_desc', 'logo_url', 'custom_colors'
        ];
 
        const newConfig = { ...existingConfig };

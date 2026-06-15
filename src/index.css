@@ -16,6 +16,45 @@
     --radius-card: 18px;           /* Bo góc card */
     --radius-btn: 12px;            /* Bo góc button */
     --shadow-soft: 0 8px 24px rgba(31, 41, 51, 0.05); /* Shadow mềm */
+
+    /* Responsive Variables for Layout and Spacing */
+    --logo-size: 56px;
+    --logo-margin-bottom: 4px;
+    --parish-name-font-size: 13.5px;
+    --parish-name-letter-spacing: 2px;
+    --event-title-font-size: 28px;
+    --event-title-margin: 2px 0 6px 0;
+    --description-font-size: 15.5px;
+    --description-line-height: 1.6;
+    
+    --wheel-size: 440px;
+    --wheel-max-size: 85vw;
+    --wheel-padding: 8px;
+    --wheel-border-width: 8px;
+    --wheel-wrapper-margin: 16px 0;
+    
+    --spin-btn-size: 84px;
+    --spin-btn-font-size: 13px;
+    --spin-btn-locked-font-size: 11px;
+    
+    --pointer-size: 48px;
+    --pointer-right: -16px;
+    
+    --ornament-offset: 12px;
+    --ornament-size: 30px;
+    
+    --card-padding: 24px 20px;
+    --card-border-radius: 20px;
+    
+    --layout-padding: 32px 12px;
+    --layout-padding-bottom: 32px;
+    --layout-padding-bottom-ad: 84px;
+    --layout-gap: 24px;
+    
+    --bgm-btn-size: 46px;
+    --bgm-btn-bottom: 24px;
+    --bgm-btn-bottom-ad: 76px;
+    --bgm-btn-right: 24px;
 }
 
 * {
@@ -1223,7 +1262,7 @@ h1, h2, h3, h4 {
     }
     
     .winner-card {
-        padding: 10px !important;
+        padding: 8px !important;
         width: 95% !important;
         max-width: 95% !important;
     }
@@ -1260,6 +1299,435 @@ h1, h2, h3, h4 {
         font-size: 0.85rem !important;
     }
 }
+
+/* ==========================================================================
+   Winner Card Visual System & Responsive Heights styling
+   ========================================================================== */
+
+/* Winner Card Default layout rules */
+.winner-card-modal-close {
+    top: -12px;
+    right: -12px;
+    width: 36px;
+    height: 36px;
+}
+
+.winner-card-inner-border {
+    padding: 4px;
+}
+
+.winner-card-body {
+    padding: 24px 16px;
+    min-height: 380px;
+}
+
+.winner-card-cross {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 12px;
+}
+
+.winner-card-parish-name {
+    font-size: 11px;
+    margin-bottom: 6px;
+}
+
+.winner-card-title {
+    font-size: 24px;
+    margin: 0 0 12px 0;
+}
+
+.winner-card-divider-top {
+    margin: 0 auto 16px auto;
+}
+
+.winner-card-badge {
+    font-size: 12px;
+    padding: 6px 16px;
+    margin-bottom: 20px;
+}
+
+.winner-card-scripture {
+    font-size: var(--scripture-font-size);
+    margin: 8px 0 12px 0;
+}
+
+.winner-card-quote {
+    font-size: 14px;
+    margin-top: 4px;
+    margin-bottom: 20px;
+}
+
+.winner-card-divider-bottom {
+    margin: 0 auto 16px auto;
+}
+
+.winner-card-greeting {
+    font-size: 11px;
+    margin: 0;
+}
+
+.winner-card-signature {
+    margin-top: 16px;
+    font-size: 9px;
+}
+
+.winner-card-controls {
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 16px;
+}
+
+.winner-card-btn-row {
+    gap: 12px;
+}
+
+.winner-card-btn {
+    height: 42px;
+    font-size: 13px;
+    gap: 6px;
+}
+
+.winner-card-gift-btn {
+    height: 42px;
+    font-size: 13.5px;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.winner-card-share-panel {
+    margin-top: 12px;
+    gap: 8px;
+    padding: 10px;
+}
+
+.winner-card-share-row {
+    gap: 8px;
+}
+
+.winner-card-share-label {
+    font-size: 10.5px;
+    margin-bottom: 2px;
+}
+
+.winner-card-share-input {
+    height: 32px;
+    padding: 0 8px;
+    font-size: 11.5px;
+}
+
+.winner-card-share-btn-grid {
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.winner-card-share-action-btn {
+    height: 32px;
+    font-size: 11px;
+    gap: 4px;
+}
+
+.winner-card-share-action-icon {
+    /* size handled in react element code */
+}
+
+.winner-card-share-action-text-prefix {
+    font-size: 11px;
+}
+
+.winner-card-share-notice {
+    font-size: 9px;
+}
+
+.winner-card-close-btn {
+    height: 40px;
+    font-size: 13px;
+}
+
+/* Shared mode default elements rules */
+.shared-cta-btn {
+    margin-top: 24px;
+    padding: 12px 28px;
+    font-size: 15px;
+}
+
+.shared-action-row {
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.shared-action-btn {
+    height: 40px;
+    font-size: 13px;
+}
+
+/* HEIGHT MEDIA QUERIES (COMPRESS V-SPACING) */
+
+@media (max-height: 760px) {
+    .winner-card-inner-border {
+        padding: 3px !important;
+    }
+    
+    .winner-card-body {
+        padding: 16px 12px !important;
+        min-height: auto !important;
+    }
+    
+    .winner-card-cross {
+        width: 28px !important;
+        height: 28px !important;
+        margin-bottom: 6px !important;
+    }
+    
+    .winner-card-parish-name {
+        font-size: 10.5px !important;
+        margin-bottom: 4px !important;
+    }
+    
+    .winner-card-title {
+        font-size: 20px !important;
+        margin: 0 0 6px 0 !important;
+    }
+    
+    .winner-card-divider-top {
+        margin: 0 auto 10px auto !important;
+    }
+    
+    .winner-card-badge {
+        font-size: 11px !important;
+        padding: 4px 12px !important;
+        margin-bottom: 12px !important;
+    }
+    
+    .winner-card-scripture {
+        margin: 6px 0 8px 0 !important;
+        font-size: calc(var(--scripture-font-size) * 0.9) !important;
+    }
+    
+    .winner-card-quote {
+        font-size: 12.5px !important;
+        margin-top: 2px !important;
+        margin-bottom: 10px !important;
+    }
+    
+    .winner-card-divider-bottom {
+        margin: 0 auto 10px auto !important;
+    }
+    
+    .winner-card-greeting {
+        font-size: 10.5px !important;
+    }
+    
+    .winner-card-signature {
+        margin-top: 10px !important;
+        font-size: 8px !important;
+    }
+    
+    .winner-card-controls {
+        gap: 8px !important;
+        margin-top: 12px !important;
+        padding-top: 10px !important;
+    }
+    
+    .winner-card-btn-row {
+        gap: 8px !important;
+    }
+    
+    .winner-card-btn {
+        height: 36px !important;
+        font-size: 12px !important;
+    }
+    
+    .winner-card-gift-btn {
+        height: 36px !important;
+        font-size: 12.5px !important;
+        margin-top: 2px !important;
+    }
+    
+    .winner-card-close-btn {
+        height: 36px !important;
+        font-size: 12px !important;
+    }
+    
+    .winner-card-share-panel {
+        margin-top: 8px !important;
+        gap: 6px !important;
+        padding: 8px !important;
+    }
+    
+    .winner-card-share-input {
+        height: 28px !important;
+        font-size: 10.5px !important;
+    }
+    
+    .winner-card-share-label {
+        font-size: 10px !important;
+    }
+    
+    .winner-card-share-btn-grid {
+        gap: 4px !important;
+        margin-top: 2px !important;
+    }
+    
+    .winner-card-share-action-btn {
+        height: 28px !important;
+        font-size: 10px !important;
+    }
+    
+    /* Shared mode elements */
+    .shared-cta-btn {
+        margin-top: 16px !important;
+        padding: 8px 20px !important;
+        font-size: 13.5px !important;
+    }
+    
+    .shared-action-row {
+        gap: 8px !important;
+        margin-top: 12px !important;
+    }
+    
+    .shared-action-btn {
+        height: 36px !important;
+        font-size: 12px !important;
+    }
+}
+
+@media (max-height: 680px) {
+    .winner-card-inner-border {
+        padding: 2px !important;
+    }
+    
+    .winner-card-body {
+        padding: 10px 8px !important;
+    }
+    
+    .winner-card-cross {
+        width: 24px !important;
+        height: 24px !important;
+        margin-bottom: 4px !important;
+    }
+    
+    .winner-card-parish-name {
+        font-size: 10px !important;
+        margin-bottom: 2px !important;
+    }
+    
+    .winner-card-title {
+        font-size: 18px !important;
+        margin: 0 0 4px 0 !important;
+    }
+    
+    .winner-card-divider-top {
+        margin: 0 auto 6px auto !important;
+    }
+    
+    .winner-card-badge {
+        font-size: 10px !important;
+        padding: 3px 10px !important;
+        margin-bottom: 8px !important;
+    }
+    
+    .winner-card-scripture {
+        margin: 4px 0 6px 0 !important;
+        font-size: calc(var(--scripture-font-size) * 0.78) !important;
+        line-height: 1.5 !important;
+    }
+    
+    .winner-card-quote {
+        font-size: 11.5px !important;
+        margin-top: 1px !important;
+        margin-bottom: 8px !important;
+    }
+    
+    .winner-card-divider-bottom {
+        margin: 0 auto 6px auto !important;
+    }
+    
+    .winner-card-greeting {
+        font-size: 10px !important;
+        line-height: 1.4 !important;
+    }
+    
+    .winner-card-signature {
+        margin-top: 6px !important;
+        font-size: 7.5px !important;
+    }
+    
+    .winner-card-controls {
+        gap: 6px !important;
+        margin-top: 8px !important;
+        padding-top: 8px !important;
+    }
+    
+    .winner-card-btn-row {
+        gap: 6px !important;
+    }
+    
+    .winner-card-btn {
+        height: 32px !important;
+        font-size: 11.5px !important;
+        border-radius: 8px !important;
+    }
+    
+    .winner-card-gift-btn {
+        height: 32px !important;
+        font-size: 12px !important;
+        margin-top: 2px !important;
+        border-radius: 8px !important;
+    }
+    
+    .winner-card-close-btn {
+        height: 32px !important;
+        font-size: 11.5px !important;
+        border-radius: 8px !important;
+    }
+    
+    .winner-card-share-panel {
+        margin-top: 6px !important;
+        gap: 4px !important;
+        padding: 6px !important;
+        border-radius: 8px !important;
+    }
+    
+    .winner-card-share-input {
+        height: 26px !important;
+        font-size: 10px !important;
+        border-radius: 4px !important;
+    }
+    
+    .winner-card-share-label {
+        font-size: 9.5px !important;
+    }
+    
+    .winner-card-share-btn-grid {
+        gap: 4px !important;
+        margin-top: 2px !important;
+    }
+    
+    .winner-card-share-action-btn {
+        height: 26px !important;
+        font-size: 9.5px !important;
+        border-radius: 4px !important;
+    }
+    
+    /* Shared mode elements */
+    .shared-cta-btn {
+        margin-top: 12px !important;
+        padding: 6px 16px !important;
+        font-size: 13px !important;
+    }
+    
+    .shared-action-row {
+        gap: 6px !important;
+        margin-top: 8px !important;
+    }
+    
+    .shared-action-btn {
+        height: 32px !important;
+        font-size: 11.5px !important;
+    }
+}
+
 
 
 
