@@ -1,17 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import type { IncomingMessage, ServerResponse } from 'http';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
-
-// Extend IncomingMessage and ServerResponse to match Vercel Node API signatures
-interface VercelRequest extends IncomingMessage {
-  query: { [key: string]: string | string[] };
-  body: Record<string, unknown> | null | undefined;
-}
-
-interface VercelResponse extends ServerResponse {
-  status: (statusCode: number) => VercelResponse;
-  json: (body: Record<string, unknown> | unknown) => void;
-}
 
 // Helper to dynamically check and get CORS headers
 function getCorsHeaders(req: VercelRequest): { [key: string]: string } | null {
@@ -328,6 +317,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (!redisResponse.ok) {
           console.error('Failed to push spin record to Redis:', await redisResponse.text());
+        } else {
+          // Trigger background sync via QStash if QSTASH_TOKEN is configured
+          const qstashToken = process.env.QSTASH_TOKEN || '';
+          if (qstashToken) {
+            try {
+              const protocol = (req.headers['x-forwarded-proto'] as string) || 'https';
+              const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || '';
+              if (host) {
+                const syncUrl = `${protocol}://${host}/api/sync-queue`;
+                const cronSecret = process.env.CRON_SECRET || '';
+                const targetUrl = cronSecret 
+                  ? `${syncUrl}?secret=${encodeURIComponent(cronSecret)}`
+                  : syncUrl;
+                  
+                const qstashPublishUrl = `https://qstash.upstash.io/v2/publish/${targetUrl}`;
+                
+                fetch(qstashPublishUrl, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${qstashToken}`,
+                    'Content-Type': 'application/json',
+                    'Upstash-Delay': '5s', // Run after 5s delay to allow other spins to batch
+                  },
+                  body: JSON.stringify({ source: 'spin_api' }),
+                }).catch(err => {
+                  console.error('QStash trigger background promise error:', err);
+                });
+                
+                console.log('[Spin API] Dispatched QStash sync trigger with 5s delay.');
+              }
+            } catch (qstashErr) {
+              console.error('Failed to dispatch QStash sync trigger:', qstashErr);
+            }
+          }
         }
       } catch (redisErr) {
         console.error('Redis operation failed:', redisErr);

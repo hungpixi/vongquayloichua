@@ -1,17 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import type { IncomingMessage, ServerResponse } from 'http';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
-
-// Extend IncomingMessage to include query and body (provided by Vercel Node helper wrapper)
-interface VercelRequest extends IncomingMessage {
-  query: { [key: string]: string | string[] };
-  body: Record<string, unknown> | null | undefined;
-}
-
-interface VercelResponse extends ServerResponse {
-  status: (statusCode: number) => VercelResponse;
-  json: (body: Record<string, unknown> | unknown) => void;
-}
 
 interface SpinQueueItem {
   id?: string;
