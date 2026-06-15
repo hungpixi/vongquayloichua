@@ -995,7 +995,7 @@ export const AdminDashboard: React.FC = () => {
               style={{
                 width: '100%',
                 textAlign: 'left',
-                background: 'transparent',
+                background: activeTab === 'dashboard' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
                 border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
@@ -1003,7 +1003,7 @@ export const AdminDashboard: React.FC = () => {
                 gap: '10px',
                 padding: '12px 16px',
                 borderRadius: '8px',
-                color: activeTab === 'dashboard' ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                color: activeTab === 'dashboard' ? 'var(--color-gold)' : 'rgba(255, 255, 255, 0.75)',
                 fontWeight: activeTab === 'dashboard' ? '700' : '500',
                 outline: 'none'
               }}
@@ -1019,7 +1019,7 @@ export const AdminDashboard: React.FC = () => {
               style={{
                 width: '100%',
                 textAlign: 'left',
-                background: 'transparent',
+                background: activeTab === 'parish' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
                 border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
@@ -1027,7 +1027,7 @@ export const AdminDashboard: React.FC = () => {
                 gap: '10px',
                 padding: '12px 16px',
                 borderRadius: '8px',
-                color: activeTab === 'parish' ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                color: activeTab === 'parish' ? 'var(--color-gold)' : 'rgba(255, 255, 255, 0.75)',
                 fontWeight: activeTab === 'parish' ? '700' : '500',
                 outline: 'none'
               }}
@@ -1043,7 +1043,7 @@ export const AdminDashboard: React.FC = () => {
               style={{
                 width: '100%',
                 textAlign: 'left',
-                background: 'transparent',
+                background: activeTab === 'presets' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
                 border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
@@ -1051,7 +1051,7 @@ export const AdminDashboard: React.FC = () => {
                 gap: '10px',
                 padding: '12px 16px',
                 borderRadius: '8px',
-                color: activeTab === 'presets' ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                color: activeTab === 'presets' ? 'var(--color-gold)' : 'rgba(255, 255, 255, 0.75)',
                 fontWeight: activeTab === 'presets' ? '700' : '500',
                 outline: 'none'
               }}
@@ -1067,7 +1067,7 @@ export const AdminDashboard: React.FC = () => {
               style={{
                 width: '100%',
                 textAlign: 'left',
-                background: 'transparent',
+                background: activeTab === 'analytics' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
                 border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
@@ -1075,7 +1075,7 @@ export const AdminDashboard: React.FC = () => {
                 gap: '10px',
                 padding: '12px 16px',
                 borderRadius: '8px',
-                color: activeTab === 'analytics' ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                color: activeTab === 'analytics' ? 'var(--color-gold)' : 'rgba(255, 255, 255, 0.75)',
                 fontWeight: activeTab === 'analytics' ? '700' : '500',
                 outline: 'none'
               }}
@@ -1091,7 +1091,7 @@ export const AdminDashboard: React.FC = () => {
               style={{
                 width: '100%',
                 textAlign: 'left',
-                background: 'transparent',
+                background: activeTab === 'gcc_guide' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
                 border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
@@ -1099,7 +1099,7 @@ export const AdminDashboard: React.FC = () => {
                 gap: '10px',
                 padding: '12px 16px',
                 borderRadius: '8px',
-                color: activeTab === 'gcc_guide' ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                color: activeTab === 'gcc_guide' ? 'var(--color-gold)' : 'rgba(255, 255, 255, 0.75)',
                 fontWeight: activeTab === 'gcc_guide' ? '700' : '500',
                 outline: 'none'
               }}

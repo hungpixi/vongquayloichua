@@ -334,12 +334,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return val % max;
     };
 
-    const selectedIdx = getRandomIndex(blessings.length);
-    const blessing = blessings[selectedIdx];
-
-    // 10. Target angle calculation
+    // 10. Target angle and segment calculation
     const display_slots = (wheel.config?.display_slots || wheel.display_slots || blessings.length);
-    const slot_idx = selectedIdx % display_slots;
+    
+    // Choose a random slot index first to guarantee 1-to-1 match with the rendered slice index
+    const slot_idx = getRandomIndex(display_slots);
+    
+    // Map the selected slot back to the corresponding blessing index
+    const selectedIdx = slot_idx % blessings.length;
+    const blessing = blessings[selectedIdx];
+    
+    // Calculate target angle precisely at the center of the target slot
     const target_angle = 2 * Math.PI - (slot_idx + 0.5) * (2 * Math.PI / display_slots);
 
     // 11. Generate HMAC-SHA256 signature

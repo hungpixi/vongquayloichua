@@ -1062,7 +1062,8 @@ export const dbService = {
       const { data, error } = await supabase!
         .from('blessings')
         .select('*')
-        .eq('wheel_id', wheelId);
+        .eq('wheel_id', wheelId)
+        .order('created_at', { ascending: true });
       if (error) throw error;
       return data || [];
     } else {
@@ -1072,6 +1073,7 @@ export const dbService = {
   },
 
   async saveBlessings(wheelId: string, blessingsList: Omit<Blessing, 'id' | 'wheel_id'>[]) {
+    const baseTime = new Date();
     if (isOnline()) {
       // 1. Delete old blessings
       const { error: deleteError } = await supabase!
@@ -1082,12 +1084,13 @@ export const dbService = {
 
       // 2. Insert new ones
       if (blessingsList.length > 0) {
-        const payload = blessingsList.map(b => ({
+        const payload = blessingsList.map((b, idx) => ({
           wheel_id: wheelId,
           category: b.category,
           quote: b.quote,
           text: b.text,
-          is_custom: b.is_custom
+          is_custom: b.is_custom,
+          created_at: new Date(baseTime.getTime() + idx * 1000).toISOString()
         }));
         const { error: insertError } = await supabase!
           .from('blessings')
@@ -1100,13 +1103,14 @@ export const dbService = {
       const filtered = blessings.filter(b => b.wheel_id !== wheelId);
       
       // Insert new
-      const newBlessings = blessingsList.map(b => ({
+      const newBlessings = blessingsList.map((b, idx) => ({
         id: generateUUID(),
         wheel_id: wheelId,
         category: b.category,
         quote: b.quote,
         text: b.text,
-        is_custom: b.is_custom
+        is_custom: b.is_custom,
+        created_at: new Date(baseTime.getTime() + idx * 1000).toISOString()
       }));
       filtered.push(...newBlessings);
       setLocalData<Blessing>('local_blessings', filtered);

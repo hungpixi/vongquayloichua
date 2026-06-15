@@ -111,25 +111,49 @@ const getTextContrastColor = (bgColor: string, themePreset?: string) => {
   const r = parseInt(hex.substring(0, 2), 16);
   const g = parseInt(hex.substring(2, 4), 16);
   const b = parseInt(hex.substring(4, 6), 16);
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
 
-  if (brightness >= 165) {
-    switch (themePreset) {
-      case 'easter':
-        return '#3E2723';
-      case 'eucharist':
-        return '#4E2A0F';
-      case 'christmas':
-        return '#0A3B24';
-      case 'tet':
-      case 'pentecost':
-        return '#5C0606';
-      default:
-        return '#0F3D2E';
-    }
-  } else {
-    return '#FFF8E8'; // Trả về màu kem sáng để có độ ấm áp và dễ đọc tối đa trên nền tối
+  // Tính độ sáng tương đối (relative luminance) theo chuẩn WCAG
+  const getLuminance = (num: number) => {
+    const val = num / 255;
+    return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+  };
+  const L_bg = 0.2126 * getLuminance(r) + 0.7152 * getLuminance(g) + 0.0722 * getLuminance(b);
+
+  // Chọn màu chữ tối theo chủ đề
+  let darkColor = '#0F3D2E';
+  switch (themePreset) {
+    case 'easter':
+      darkColor = '#3E2723';
+      break;
+    case 'eucharist':
+      darkColor = '#4E2A0F';
+      break;
+    case 'christmas':
+      darkColor = '#0A3B24';
+      break;
+    case 'tet':
+    case 'pentecost':
+      darkColor = '#5C0606';
+      break;
+    default:
+      darkColor = '#0F3D2E';
   }
+
+  // Độ sáng của chữ tối
+  const dHex = darkColor.replace('#', '');
+  const dr = parseInt(dHex.substring(0, 2), 16);
+  const dg = parseInt(dHex.substring(2, 4), 16);
+  const db = parseInt(dHex.substring(4, 6), 16);
+  const L_dark = 0.2126 * getLuminance(dr) + 0.7152 * getLuminance(dg) + 0.0722 * getLuminance(db);
+
+  // Độ sáng của chữ sáng (#FFF8E8)
+  const L_light = 0.941;
+
+  // Tính tỷ lệ tương phản (contrast ratio) cho cả 2 phương án
+  const ratioDark = L_bg > L_dark ? (L_bg + 0.05) / (L_dark + 0.05) : (L_dark + 0.05) / (L_bg + 0.05);
+  const ratioLight = L_bg > L_light ? (L_bg + 0.05) / (L_light + 0.05) : (L_light + 0.05) / (L_bg + 0.05);
+
+  return ratioDark >= ratioLight ? darkColor : '#FFF8E8';
 };
 
 // Hàm lấy màu tối tương phản tốt cho chữ/viền trên nền sáng (thiệp lộc)
@@ -232,7 +256,7 @@ export const AdminWheelEditor: React.FC = () => {
   const [cardGreeting, setCardGreeting] = useState('');
 
   // UI & Chế độ nhập liệu danh sách lộc
-  const [editorMode, setEditorMode] = useState<'list' | 'bulk'>('list');
+  const [editorMode, setEditorMode] = useState<'list' | 'bulk' | 'segment'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
@@ -491,16 +515,126 @@ export const AdminWheelEditor: React.FC = () => {
     return parsed;
   };
 
+  const syncToSegmentCount = (currentBlessings: Blessing[], slotsCount: number) => {
+    const updated = [...currentBlessings];
+    if (updated.length < slotsCount) {
+      for (let i = updated.length; i < slotsCount; i++) {
+        updated.push({
+          id: `temp-seg-${i}-${Date.now()}`,
+          wheel_id: wheelId || '',
+          category: `Lát số ${i + 1}`,
+          quote: '',
+          text: `Nội dung lộc cho lát số ${i + 1}`,
+          is_custom: true
+        });
+      }
+    } else if (updated.length > slotsCount) {
+      updated.splice(slotsCount);
+    }
+    return updated;
+  };
+
   // Chuyển tab và đồng bộ
-  const handleSwitchMode = (mode: 'list' | 'bulk') => {
-    if (editorMode === 'bulk' && mode === 'list') {
-      // Đồng bộ từ Textarea sang Grid
-      syncRawTextToBlessings(rawText);
-    } else if (editorMode === 'list' && mode === 'bulk') {
-      // Đồng bộ từ Grid sang Textarea
-      syncBlessingsToRawText(blessings);
+  const handleSwitchMode = (mode: 'list' | 'bulk' | 'segment') => {
+    let current = blessings;
+    if (editorMode === 'bulk') {
+      current = parseRawTextToBlessings(rawText);
+    }
+
+    if (mode === 'segment') {
+      const slotsCount = displaySlots && displaySlots > 0 ? displaySlots : (current.length || 12);
+      const synced = syncToSegmentCount(current, slotsCount);
+      setBlessings(synced);
+      syncBlessingsToRawText(synced);
+    } else if (mode === 'list') {
+      setBlessings(current);
+    } else if (mode === 'bulk') {
+      setBlessings(current);
+      syncBlessingsToRawText(current);
     }
     setEditorMode(mode);
+  };
+
+  const handleDisplaySlotsChange = (newSlots: number) => {
+    if (newSlots === 0) {
+      setDisplaySlots(0);
+      return;
+    }
+
+    const currentBlessings = editorMode === 'bulk' ? parseRawTextToBlessings(rawText) : blessings;
+
+    if (newSlots > currentBlessings.length) {
+      const diff = newSlots - currentBlessings.length;
+      const addedBlessings: Blessing[] = [];
+      for (let i = 0; i < diff; i++) {
+        addedBlessings.push({
+          id: `temp-add-sync-${Date.now()}-${i}`,
+          wheel_id: wheelId || '',
+          category: 'Lời Chúa',
+          quote: '',
+          text: `Lời Chúa mới ${currentBlessings.length + i + 1}`,
+          is_custom: true
+        });
+      }
+      const updated = [...currentBlessings, ...addedBlessings];
+      setBlessings(updated);
+      syncBlessingsToRawText(updated);
+      setDisplaySlots(newSlots);
+      showToastMsg(`Đã tự động thêm ${diff} câu lộc mặc định.`);
+    } else if (newSlots < currentBlessings.length) {
+      const diff = currentBlessings.length - newSlots;
+      const confirmSlice = window.confirm(
+        `Số khung hiển thị mới (${newSlots}) ít hơn số câu lộc hiện tại (${currentBlessings.length}).\n` +
+        `Hệ thống sẽ loại bỏ ${diff} câu lộc ở cuối danh sách. Bạn có chắc chắn muốn tiếp tục?`
+      );
+      if (confirmSlice) {
+        const updated = currentBlessings.slice(0, newSlots);
+        setBlessings(updated);
+        syncBlessingsToRawText(updated);
+        setDisplaySlots(newSlots);
+        showToastMsg(`Đã cắt bớt danh sách xuống ${newSlots} câu lộc.`);
+      }
+    } else {
+      setDisplaySlots(newSlots);
+    }
+  };
+
+  const handleSegmentChange = (index: number, field: 'category' | 'quote' | 'text', value: string) => {
+    const updated = [...blessings];
+    // Fill any missing elements up to index
+    for (let i = 0; i <= index; i++) {
+      if (!updated[i]) {
+        updated[i] = {
+          id: `temp-seg-${i}-${Date.now()}`,
+          wheel_id: wheelId || '',
+          category: `Lát số ${i + 1}`,
+          quote: '',
+          text: `Nội dung lộc cho lát số ${i + 1}`,
+          is_custom: true
+        };
+      }
+    }
+    updated[index] = {
+      ...updated[index],
+      [field]: value
+    };
+    setBlessings(updated);
+    syncBlessingsToRawText(updated);
+  };
+
+  const handleAddSegment = () => {
+    const updated = [...blessings];
+    updated.push({
+      id: `temp-add-${Date.now()}`,
+      wheel_id: wheelId || '',
+      category: `Lát số ${updated.length + 1}`,
+      quote: '',
+      text: `Nội dung lộc cho lát số ${updated.length + 1}`,
+      is_custom: true
+    });
+    setBlessings(updated);
+    syncBlessingsToRawText(updated);
+    showToastMsg('Đã thêm lát cắt mới.');
   };
 
   const fetchWheelData = React.useCallback(async () => {
@@ -585,29 +719,31 @@ export const AdminWheelEditor: React.FC = () => {
   // Theme presets helper matching the public view
   const getThemeColors = (preset: string) => {
     switch (preset) {
-      case 'christmas': // Giáng Sinh
-        return ['#C21807', '#0F5E3D', '#D8B43F', '#FFFFFF', '#0E4B75'];
-      case 'tet': // Tết Nguyên Đán
-        return ['#D32F2F', '#D8B43F', '#EC407A', '#FFFDF6', '#F57C00', '#B71C1C'];
-      case 'easter': // Phục Sinh
-        return ['#FBC02D', '#FFFFFF', '#FFF9C4', '#81C784', '#F57F17'];
-      case 'pentecost': // Hiện Xuống (7 Ơn)
-        return ['#D32F2F', '#FF6F00', '#FFB300', '#FFFDF6', '#E65100'];
-      case 'lent': // Mùa Chay
-        return ['#5E35B1', '#311B92', '#7E57C2', '#D1C4E9', '#CFD8DC'];
-      case 'advent': // Mùa Vọng
-        return ['#7B1FA2', '#F06292', '#4A148C', '#1B5E20', '#E1BEE7'];
-      case 'marian': // Đức Mẹ
-        return ['#1E88E5', '#FFFFFF', '#0D47A1', '#BBDEFB', '#FDD835'];
-      case 'joseph': // Thánh Giuse
-        return ['#8D6E63', '#4E342E', '#D7CCC8', '#FFF8E1', '#8D6E63'];
-      case 'eucharist': // Mình Thánh Chúa
-        return ['#FFD54F', '#FFFFFF', '#FFF59D', '#B71C1C', '#FF8F00'];
+      case 'christmas': // Giáng Sinh: Đỏ Crimson sẫm, Xanh lá thông cổ điển, Vàng Gold sang, Trắng kem tuyết, Xanh dương đêm, Đỏ Crimson sẫm hơn
+        return ['#A81D22', '#0D4A30', '#D4A33B', '#F7F7F7', '#0F2C59', '#7A0E12'];
+      case 'tet': // Tết Nguyên Đán: Đỏ cờ hội, Vàng Hoàng kim nhạt, Hồng Đào ấm, Trắng kem sữa, Cam quýt ngọt, Đỏ cờ hội sẫm
+        return ['#B81D24', '#E5A93B', '#F3A0A7', '#FFFDF2', '#D96B27', '#8A1015'];
+      case 'easter': // Phục Sinh: Vàng nắng sớm, Trắng huệ thanh sạch, Vàng pastel dịu, Xanh lá non, Tím Phục Sinh vương giả, Vàng pastel dịu hơn
+        return ['#E5B82B', '#FFFFFF', '#FFF3CD', '#6FCF97', '#9B51E0', '#FFEAA7'];
+      case 'pentecost': // Hiện Xuống (7 Ơn): Đỏ lửa rực, Cam lửa ấm, Vàng hoa cúc, Trắng kem gió thánh, Cam đỏ, Đỏ lửa rực sẫm
+        return ['#C0392B', '#D35400', '#F39C12', '#FFFDF5', '#E65100', '#901E13'];
+      case 'lent': // Mùa Chay: Tím phụng vụ trầm, Tím sẫm hối cải, Oải hương tro buồn, Xám tro bụi, Tím hoa cà sẫm, Tím hối cải cực sẫm
+        return ['#5B21B6', '#4C1D95', '#A78BFA', '#9CA3AF', '#D1C4E9', '#3B127D'];
+      case 'advent': // Mùa Vọng: Tím hoa cà đậm, Hồng Gaudete, Tím vương quyền, Xanh hy vọng, Hồng nhạt, Tím hoa cà cực sẫm
+        return ['#581C56', '#EC4899', '#4A044E', '#047857', '#C084FC', '#380436'];
+      case 'marian': // Đức Mẹ: Xanh trời dịu mát, Trắng dâng Mẹ tinh tuyền, Xanh Navy sâu thẳm, Xanh ngọc nhẹ, Vàng ánh dương, Xanh Navy cực sẫm
+        return ['#1E65A7', '#FFFFFF', '#1D3557', '#A8DADC', '#E9C46A', '#153A64'];
+      case 'joseph': // Thánh Giuse: Nâu đất sét, Nâu gỗ óc chó, Vàng rơm nhạt, Trắng sữa cổ điển, Xanh thợ mộc, Nâu gỗ óc chó cực sẫm
+        return ['#704F37', '#5C3A21', '#D2B48C', '#FDF5E6', '#1E5E4E', '#4E342E'];
+      case 'eucharist': // Thánh Thể: Vàng đồng cổ, Trắng ngà Mình Thánh, Vàng bánh thánh, Vàng đồng sáng, Đỏ rượu vang cực sẫm
+        return ['#B8860B', '#FFFFFA', '#CD7F32', '#FFD700', '#FF8F00', '#5E0000'];
       case 'gold': // Cổ Điển (Default)
       default:
-        return ['#0F3D2E', '#D8B43F', '#1F6B4A', '#FFF8E8', '#2F6B4F', '#E6B93D'];
+        return ['#0E3A2F', '#D4AF37', '#1E5E4E', '#FFFBF0', '#164E3E', '#08251E'];
     }
   };
+
+  const effectiveSlots = displaySlots && displaySlots > 0 ? displaySlots : (blessings.length || 12);
 
   // Parse raw text segment labels in real time for canvas preview
   const previewSegments = React.useMemo(() => {
@@ -1264,6 +1400,14 @@ export const AdminWheelEditor: React.FC = () => {
       finalBlessings = syncRawTextToBlessings(rawText);
     }
 
+    // Đảm bảo đồng bộ 1-1 theo số khung hiển thị nếu displaySlots > 0
+    if (displaySlots > 0) {
+      finalBlessings = syncToSegmentCount(finalBlessings, displaySlots);
+      // Cập nhật lại state để hiển thị đúng trên canvas/giao diện sau khi lưu
+      setBlessings(finalBlessings);
+      syncBlessingsToRawText(finalBlessings);
+    }
+
     try {
       const isUnique = await dbService.checkWheelSlugUnique(parish.id, slug, wheelId);
       if (!isUnique) {
@@ -1622,7 +1766,7 @@ export const AdminWheelEditor: React.FC = () => {
                     id="display-slots"
                     className="form-control"
                     value={displaySlots}
-                    onChange={(e) => setDisplaySlots(parseInt(e.target.value))}
+                    onChange={(e) => handleDisplaySlotsChange(parseInt(e.target.value))}
                     style={{ height: '40px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
                   >
                     <option value={0}>Tự động theo số lộc</option>
@@ -2041,6 +2185,15 @@ export const AdminWheelEditor: React.FC = () => {
                   </button>
                   <button
                     type="button"
+                    onClick={() => handleSwitchMode('segment')}
+                    className={`btn ${editorMode === 'segment' ? 'btn-gold' : ''}`}
+                    style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '6px', border: 'none', background: editorMode === 'segment' ? 'var(--color-gold)' : 'transparent', color: editorMode === 'segment' ? '#FFFFFF' : 'var(--color-primary)', cursor: 'pointer', fontWeight: '600' }}
+                  >
+                    <Sparkles size={13} style={{ marginRight: '4px', display: 'inline' }} />
+                    Cấu hình lát cắt
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleSwitchMode('bulk')}
                     className={`btn ${editorMode === 'bulk' ? 'btn-gold' : ''}`}
                     style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '6px', border: 'none', background: editorMode === 'bulk' ? 'var(--color-gold)' : 'transparent', color: editorMode === 'bulk' ? '#FFFFFF' : 'var(--color-primary)', cursor: 'pointer', fontWeight: '600' }}
@@ -2364,6 +2517,163 @@ export const AdminWheelEditor: React.FC = () => {
                       style={{ border: '1.5px solid rgba(15, 61, 46, 0.15)', borderRadius: '10px', minHeight: '260px', fontSize: '13px', lineHeight: '1.6' }}
                     />
                   </div>
+                </div>
+              )}
+
+              {/* Mode Segment-based editing */}
+              {editorMode === 'segment' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                    backgroundColor: 'rgba(216, 180, 63, 0.08)',
+                    border: '1.5px solid rgba(216, 180, 63, 0.35)',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    marginBottom: '8px'
+                  }}>
+                    <Sparkles size={18} style={{ color: '#D8B43F', flexShrink: 0, marginTop: '2px' }} />
+                    <div style={{ fontSize: '13px', color: 'var(--color-primary)', lineHeight: '1.5' }}>
+                      <strong style={{ display: 'block', color: 'var(--color-primary)', marginBottom: '2px', fontWeight: '700' }}>
+                        Chế độ Cấu hình theo Lát cắt (Segment-based editing)
+                      </strong>
+                      Cấu hình trực tiếp nội dung tương ứng với từng lát cắt trên vòng quay (từ 1 đến {effectiveSlots}).
+                      Hệ thống tự động liên kết 1-1 theo thứ tự sắp xếp, đảm bảo khi vòng quay dừng ở lát số nào thì hiển thị chính xác nội dung câu Lộc của lát đó.
+                    </div>
+                  </div>
+
+                  {/* List of segments */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {Array.from({ length: effectiveSlots }).map((_, index) => {
+                      const item = blessings[index] || { category: '', quote: '', text: '' };
+                      const colors = getThemeColors(themePreset);
+                      const sliceColor = colors[index % colors.length];
+                      const contrastTextColor = getTextContrastColor(sliceColor, themePreset);
+
+                      return (
+                        <div
+                          key={index}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px',
+                            padding: '16px',
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid rgba(15, 61, 46, 0.08)',
+                            borderRadius: '10px',
+                            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div
+                                style={{
+                                  width: '24px',
+                                  height: '24px',
+                                  borderRadius: '50%',
+                                  backgroundColor: sliceColor,
+                                  color: contrastTextColor,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                  border: '1px solid rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                {index + 1}
+                              </div>
+                              <span style={{ fontWeight: '700', color: 'var(--color-primary)', fontSize: '14px' }}>
+                                Lát cắt số {index + 1}
+                              </span>
+                            </div>
+                            {displaySlots === 0 && blessings.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = blessings.filter((_, idx) => idx !== index);
+                                  setBlessings(updated);
+                                  syncBlessingsToRawText(updated);
+                                  showToastMsg(`Đã xóa lát cắt số ${index + 1}.`);
+                                }}
+                                className="btn btn-danger"
+                                style={{ padding: '4px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', border: 'none', borderRadius: '6px', cursor: 'pointer', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444' }}
+                              >
+                                <Trash2 size={12} />
+                                <span>Xóa lát</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '11.5px', fontWeight: '600', color: 'var(--color-primary)', marginBottom: '4px', display: 'block' }}>
+                                Tên hiển thị trên lát (Category)
+                              </label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder={`Ví dụ: Lộc ${index + 1}`}
+                                value={item.category || ''}
+                                onChange={(e) => handleSegmentChange(index, 'category', e.target.value)}
+                                style={{ height: '36px', fontSize: '13px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                              />
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                              <label style={{ fontSize: '11.5px', fontWeight: '600', color: 'var(--color-primary)', marginBottom: '4px', display: 'block' }}>
+                                Trích dẫn (Quote)
+                              </label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Ví dụ: Ga 3,16"
+                                value={item.quote || ''}
+                                onChange={(e) => handleSegmentChange(index, 'quote', e.target.value)}
+                                style={{ height: '36px', fontSize: '13px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label style={{ fontSize: '11.5px', fontWeight: '600', color: 'var(--color-primary)', marginBottom: '4px', display: 'block' }}>
+                              Nội dung Lộc / Lời chúc (Text)
+                            </label>
+                            <textarea
+                              className="form-control"
+                              placeholder="Nhập câu Lộc hiển thị trên thiệp..."
+                              value={item.text || ''}
+                              onChange={(e) => handleSegmentChange(index, 'text', e.target.value)}
+                              rows={2}
+                              style={{ fontSize: '13px', padding: '8px', resize: 'vertical', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {displaySlots === 0 && (
+                    <button
+                      type="button"
+                      onClick={handleAddSegment}
+                      className="btn btn-primary btn-gold"
+                      style={{
+                        alignSelf: 'center',
+                        marginTop: '12px',
+                        padding: '10px 20px',
+                        fontSize: '13px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        fontWeight: '600'
+                      }}
+                    >
+                      <Plus size={16} />
+                      <span>Thêm Lát Cắt Mới</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

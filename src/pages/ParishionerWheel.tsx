@@ -132,24 +132,71 @@ const getTextContrastColor = (bgColor: string, themePreset?: string) => {
   const r = parseInt(hex.substring(0, 2), 16);
   const g = parseInt(hex.substring(2, 4), 16);
   const b = parseInt(hex.substring(4, 6), 16);
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  
-  if (brightness >= 165) {
-    switch (themePreset) {
-      case 'easter':
-        return '#3E2723';
-      case 'eucharist':
-        return '#4E2A0F';
-      case 'christmas':
-        return '#0A3B24';
-      case 'tet':
-      case 'pentecost':
-        return '#5C0606';
-      default:
-        return '#0F3D2E';
-    }
-  } else {
-    return '#FFF8E8'; // Trả về màu kem sáng để có độ ấm áp và dễ đọc tối đa trên nền tối
+
+  // Tính độ sáng tương đối (relative luminance) theo chuẩn WCAG
+  const getLuminance = (num: number) => {
+    const val = num / 255;
+    return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+  };
+  const L_bg = 0.2126 * getLuminance(r) + 0.7152 * getLuminance(g) + 0.0722 * getLuminance(b);
+
+  // Chọn màu chữ tối theo chủ đề
+  let darkColor = '#0F3D2E';
+  switch (themePreset) {
+    case 'easter':
+      darkColor = '#3E2723';
+      break;
+    case 'eucharist':
+      darkColor = '#4E2A0F';
+      break;
+    case 'christmas':
+      darkColor = '#0A3B24';
+      break;
+    case 'tet':
+    case 'pentecost':
+      darkColor = '#5C0606';
+      break;
+    default:
+      darkColor = '#0F3D2E';
+  }
+
+  // Độ sáng của chữ tối
+  const dHex = darkColor.replace('#', '');
+  const dr = parseInt(dHex.substring(0, 2), 16);
+  const dg = parseInt(dHex.substring(2, 4), 16);
+  const db = parseInt(dHex.substring(4, 6), 16);
+  const L_dark = 0.2126 * getLuminance(dr) + 0.7152 * getLuminance(dg) + 0.0722 * getLuminance(db);
+
+  // Độ sáng của chữ sáng (#FFF8E8)
+  const L_light = 0.941;
+
+  // Tính tỷ lệ tương phản (contrast ratio) cho cả 2 phương án
+  const ratioDark = L_bg > L_dark ? (L_bg + 0.05) / (L_dark + 0.05) : (L_dark + 0.05) / (L_bg + 0.05);
+  const ratioLight = L_bg > L_light ? (L_bg + 0.05) / (L_light + 0.05) : (L_light + 0.05) / (L_bg + 0.05);
+
+  return ratioDark >= ratioLight ? darkColor : '#FFF8E8';
+};
+
+// Hàm lấy màu chữ tương phản cao riêng cho nút tròn chính giữa (vốn có nền vàng/gold/amber ở tất cả các theme)
+const getSpinCenterBtnTextColor = (themePreset?: string) => {
+  switch (themePreset) {
+    case 'christmas':
+      return '#780C0E'; // Đỏ rất sẫm phụng vụ
+    case 'tet':
+    case 'pentecost':
+      return '#5C0606'; // Đỏ sẫm
+    case 'lent':
+    case 'advent':
+      return '#3B1065'; // Tím cực sẫm
+    case 'marian':
+      return '#0A2540'; // Navy cực sẫm
+    case 'joseph':
+    case 'eucharist':
+    case 'easter':
+      return '#3E2723'; // Nâu đất cực sẫm
+    case 'gold':
+    default:
+      return '#0E3A2F'; // Xanh lá sẫm
   }
 };
 
@@ -333,27 +380,27 @@ export const ParishionerWheel: React.FC = () => {
 
   const getThemeColors = (preset?: string) => {
     switch (preset) {
-      case 'christmas': // Giáng Sinh: Đỏ Crimson sẫm, Xanh lá thông cổ điển, Vàng Gold sang, Trắng kem tuyết, Xanh dương đêm
-        return ['#A81D22', '#0D4A30', '#D4A33B', '#F7F7F7', '#0F2C59'];
-      case 'tet': // Tết Nguyên Đán: Đỏ cờ hội, Vàng Hoàng kim nhạt, Hồng Đào ấm, Trắng kem sữa, Cam quýt ngọt
-        return ['#B81D24', '#E5A93B', '#F3A0A7', '#FFFDF2', '#D96B27'];
-      case 'easter': // Phục Sinh: Vàng nắng sớm, Trắng huệ thanh sạch, Vàng pastel dịu, Xanh lá non, Tím Phục Sinh vương giả
-        return ['#F2C94C', '#FFFFFF', '#FFF3CD', '#6FCF97', '#9B51E0'];
-      case 'pentecost': // Hiện Xuống (7 Ơn): Đỏ lửa rực, Cam lửa ấm, Vàng hoa cúc, Trắng kem gió thánh
-        return ['#C0392B', '#D35400', '#F39C12', '#FFFDF5'];
-      case 'lent': // Mùa Chay: Tím phụng vụ trầm, Tím sẫm hối cải, Oải hương tro buồn, Xám tro bụi
-        return ['#6D28D9', '#4C1D95', '#A78BFA', '#9CA3AF'];
-      case 'advent': // Mùa Vọng: Tím hoa cà đậm, Hồng Gaudete, Tím vương quyền, Xanh hy vọng
-        return ['#701A75', '#EC4899', '#4A044E', '#047857'];
-      case 'marian': // Đức Mẹ: Xanh trời dịu mát, Trắng dâng Mẹ tinh tuyền, Xanh Navy sâu thẳm, Xanh ngọc nhẹ
-        return ['#3A86C8', '#FFFFFF', '#1D3557', '#A8DADC'];
-      case 'joseph': // Thánh Giuse: Nâu đất sét, Nâu gỗ óc chó của thợ mộc, Vàng rơm nhạt, Trắng sữa cổ điển
-        return ['#8B5A2B', '#5C3A21', '#D2B48C', '#FDF5E6'];
-      case 'eucharist': // Thánh Thể: Vàng bánh thánh, Trắng ngà Mình Thánh, Vàng đồng cổ Chén Thánh, Đỏ rượu vang
-        return ['#FFD700', '#FFFFFA', '#CD7F32', '#8B0000'];
+      case 'christmas': // Giáng Sinh: Đỏ Crimson sẫm, Xanh lá thông cổ điển, Vàng Gold sang, Trắng kem tuyết, Xanh dương đêm, Đỏ Crimson sẫm hơn
+        return ['#A81D22', '#0D4A30', '#D4A33B', '#F7F7F7', '#0F2C59', '#7A0E12'];
+      case 'tet': // Tết Nguyên Đán: Đỏ cờ hội, Vàng Hoàng kim nhạt, Hồng Đào ấm, Trắng kem sữa, Cam quýt ngọt, Đỏ cờ hội sẫm
+        return ['#B81D24', '#E5A93B', '#F3A0A7', '#FFFDF2', '#D96B27', '#8A1015'];
+      case 'easter': // Phục Sinh: Vàng nắng sớm, Trắng huệ thanh sạch, Vàng pastel dịu, Xanh lá non, Tím Phục Sinh vương giả, Vàng pastel dịu hơn
+        return ['#E5B82B', '#FFFFFF', '#FFF3CD', '#6FCF97', '#9B51E0', '#FFEAA7'];
+      case 'pentecost': // Hiện Xuống (7 Ơn): Đỏ lửa rực, Cam lửa ấm, Vàng hoa cúc, Trắng kem gió thánh, Cam đỏ, Đỏ lửa rực sẫm
+        return ['#C0392B', '#D35400', '#F39C12', '#FFFDF5', '#E65100', '#901E13'];
+      case 'lent': // Mùa Chay: Tím phụng vụ trầm, Tím sẫm hối cải, Oải hương tro buồn, Xám tro bụi, Tím hoa cà sẫm, Tím hối cải cực sẫm
+        return ['#5B21B6', '#4C1D95', '#A78BFA', '#9CA3AF', '#D1C4E9', '#3B127D'];
+      case 'advent': // Mùa Vọng: Tím hoa cà đậm, Hồng Gaudete, Tím vương quyền, Xanh hy vọng, Hồng nhạt, Tím hoa cà cực sẫm
+        return ['#581C56', '#EC4899', '#4A044E', '#047857', '#C084FC', '#380436'];
+      case 'marian': // Đức Mẹ: Xanh trời dịu mát, Trắng dâng Mẹ tinh tuyền, Xanh Navy sâu thẳm, Xanh ngọc nhẹ, Vàng ánh dương, Xanh Navy cực sẫm
+        return ['#1E65A7', '#FFFFFF', '#1D3557', '#A8DADC', '#E9C46A', '#153A64'];
+      case 'joseph': // Thánh Giuse: Nâu đất sét, Nâu gỗ óc chó, Vàng rơm nhạt, Trắng sữa cổ điển, Xanh thợ mộc, Nâu gỗ óc chó cực sẫm
+        return ['#704F37', '#5C3A21', '#D2B48C', '#FDF5E6', '#1E5E4E', '#4E342E'];
+      case 'eucharist': // Thánh Thể: Vàng đồng cổ, Trắng ngà Mình Thánh, Vàng bánh thánh, Vàng đồng sáng, Đỏ rượu vang cực sẫm
+        return ['#B8860B', '#FFFFFA', '#CD7F32', '#FFD700', '#FF8F00', '#5E0000'];
       case 'gold': // Cổ Điển / Mặc Định: Xanh phụng vụ trầm & Vàng thau đánh bóng
       default:
-        return ['#0E3A2F', '#D4AF37', '#1E5E4E', '#FFFBF0', '#164E3E', '#F3C63F'];
+        return ['#0E3A2F', '#D4AF37', '#1E5E4E', '#FFFBF0', '#164E3E', '#08251E'];
     }
   };
 
@@ -1556,8 +1603,8 @@ export const ParishionerWheel: React.FC = () => {
                     justifyContent: 'center',
                     height: '42px',
                     borderRadius: '12px',
-                    background: `${primaryDark}0D`,
-                    border: `1px solid ${primaryDark}25`,
+                    background: `${primaryDark}15`,
+                    border: `1.5px solid ${primaryDark}`,
                     color: primaryDark,
                     fontSize: '13px',
                     fontWeight: '600',
@@ -2273,9 +2320,9 @@ export const ParishionerWheel: React.FC = () => {
               flex: 1,
               height: '40px',
               borderRadius: '12px',
-              background: 'rgba(255, 255, 255, 0.2)',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              color: '#FFFFFF',
+              background: '#FFFFFF',
+              border: `1.5px solid ${primaryDark}`,
+              color: primaryDark,
               fontSize: '13px',
               fontWeight: '600',
               cursor: 'pointer',
@@ -2491,9 +2538,10 @@ export const ParishionerWheel: React.FC = () => {
               style={{
                 background: (cachedLogoUrl || parish?.logo_url)
                   ? 'transparent'
-                  : `linear-gradient(135deg, ${getThemeColors(wheel.theme_preset)[0]} 0%, ${
-                      getThemeColors(wheel.theme_preset)[4]
-                    } 100%)`,
+                  : (() => {
+                      const colors = getThemeColors(wheel.theme_preset);
+                      return `linear-gradient(135deg, ${colors[0]} 0%, ${colors[colors.length - 1]} 100%)`;
+                    })(),
                 color: getTextContrastColor(getThemeColors(wheel.theme_preset)[0], wheel.theme_preset),
                 border: `2px solid ${getDarkContrastColor(getThemeColors(wheel.theme_preset)[1], wheel.theme_preset)}`,
                 boxShadow: '0 4px 12px rgba(15, 61, 46, 0.15)',
@@ -2685,7 +2733,7 @@ export const ParishionerWheel: React.FC = () => {
                       wheel.theme_preset === 'christmas'
                         ? 'radial-gradient(circle at 30% 30%, #FFFDF6 0%, #F59E0B 45%, #D97706 75%, #78350F 100%)'
                         : 'radial-gradient(circle at 30% 30%, #FFEFA6 0%, #D8B43F 50%, #A37F1A 100%)',
-                    color: wheel.theme_preset === 'christmas' ? '#9E1B1B' : getDarkContrastColor(getThemeColors(wheel.theme_preset)[0], wheel.theme_preset),
+                    color: getSpinCenterBtnTextColor(wheel.theme_preset),
                     borderColor: wheel.theme_preset === 'christmas' ? '#FFFBEB' : '#FFF5D1',
                     borderWidth: '2px',
                     borderStyle: 'solid',
@@ -2729,7 +2777,7 @@ export const ParishionerWheel: React.FC = () => {
                       wheel.theme_preset === 'christmas'
                         ? 'radial-gradient(circle at 30% 30%, #FFFDF6 0%, #F59E0B 45%, #D97706 75%, #78350F 100%)'
                         : 'radial-gradient(circle at 30% 30%, #FFEFA6 0%, #D8B43F 50%, #A37F1A 100%)',
-                    color: wheel.theme_preset === 'christmas' ? '#9E1B1B' : getDarkContrastColor(getThemeColors(wheel.theme_preset)[0], wheel.theme_preset),
+                    color: getSpinCenterBtnTextColor(wheel.theme_preset),
                     borderColor: wheel.theme_preset === 'christmas' ? '#FFFBEB' : '#FFF5D1',
                     borderWidth: '2px',
                     borderStyle: 'solid',
@@ -2763,10 +2811,14 @@ export const ParishionerWheel: React.FC = () => {
                 onClick={handleOpenLockedModal}
                 className="btn"
                 style={{
-                  background: `linear-gradient(135deg, ${getThemeColors(wheel.theme_preset)[0]} 0%, ${
-                    getThemeColors(wheel.theme_preset)[4]
-                  } 100%)`,
+                  background: (() => {
+                    const colors = getThemeColors(wheel.theme_preset);
+                    return `linear-gradient(135deg, ${colors[0]} 0%, ${colors[colors.length - 1]} 100%)`;
+                  })(),
                   color: getTextContrastColor(getThemeColors(wheel.theme_preset)[0], wheel.theme_preset),
+                  textShadow: getTextContrastColor(getThemeColors(wheel.theme_preset)[0], wheel.theme_preset) === '#FFF8E8'
+                    ? '0 1px 2px rgba(0, 0, 0, 0.6)'
+                    : 'none',
                   border: `1.5px solid ${getDarkContrastColor(getThemeColors(wheel.theme_preset)[1], wheel.theme_preset)}`,
                   gap: '8px',
                   display: 'inline-flex',
