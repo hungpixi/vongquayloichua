@@ -6,12 +6,14 @@ import { supabase } from '../services/supabaseClient';
 import { Church, Loader, CheckCircle2, AlertTriangle, Mail } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
-  const { signUp, signInWithOtp } = useAuth();
+  const { signUp } = useAuth();
   const navigate = useNavigate();
 
   const [parishName, setParishName] = useState('');
   const [slug, setSlug] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [invitationCode, setInvitationCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   
   // Slug live validation states
@@ -20,7 +22,6 @@ export const RegisterPage: React.FC = () => {
   const [checkingSlug, setCheckingSlug] = useState(false);
   
   const [loading, setLoading] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
 
   // Automatically generate clean slug from parish name
   const handleParishNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +101,16 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    if (password.length < 6) {
+      setError('Mật khẩu phải chứa ít nhất 6 ký tự.');
+      return;
+    }
+
+    if (!invitationCode || invitationCode.length !== 6) {
+      setError('Mã mời xác thực phải chứa đúng 6 chữ số.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -110,18 +121,30 @@ export const RegisterPage: React.FC = () => {
         return;
       }
 
-      // Store registration data temporarily in LocalStorage for callback creation
+      // Step A: Call backend to verify invitation code
+      if (supabase) {
+        const verifyRes = await fetch('/api/verify-invite', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ code: invitationCode }),
+        });
+
+        const verifyData = await verifyRes.json();
+        if (!verifyRes.ok || !verifyData.success) {
+          throw new Error(verifyData.error || 'Mã mời không chính xác hoặc đã hết hạn.');
+        }
+      }
+
+      // Store registration data temporarily in LocalStorage
       localStorage.setItem('pending_parish_name', parishName);
       localStorage.setItem('pending_parish_slug', slug);
 
-      if (supabase) {
-        // Online: Send passwordless signup OTP / Magic Link
-        await signInWithOtp(email, true);
-        setIsSubmitted(true);
-      } else {
-        // Offline: Just transition to simulated confirmation
-        setIsSubmitted(true);
-      }
+      // Register using Email & Password (no OTP email confirmation required)
+      await signUp(email, password, parishName, slug);
+      navigate('/admin');
+      
     } catch (err: unknown) {
       console.error(err);
       const msg = err instanceof Error 
@@ -136,143 +159,6 @@ export const RegisterPage: React.FC = () => {
       setLoading(false);
     }
   };
-
-  // Simulated Offline Activation Handler
-  const handleOfflineActivate = async () => {
-    setLoading(true);
-    try {
-      // Offline signUp will directly create user and parish in localStorage and sign in
-      await signUp(email, '123456', parishName, slug);
-      navigate('/admin');
-    } catch (err: unknown) {
-      console.error(err);
-      const msg = err instanceof Error 
-        ? err.message 
-        : typeof err === 'object' && err !== null && 'message' in err 
-        ? String((err as Record<string, unknown>).message) 
-        : typeof err === 'string'
-        ? err
-        : 'Lỗi kích hoạt thử nghiệm.';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Smart links for mail clients
-  const getGmailUrl = () => {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile) {
-      return /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'googlegmail://' : 'intent://#Intent;scheme=googlegmail;package=com.google.android.gm;end';
-    }
-    return 'https://mail.google.com';
-  };
-
-  const getOutlookUrl = () => {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isMobile) {
-      return /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'ms-outlook://' : 'intent://#Intent;scheme=ms-outlook;package=com.microsoft.office.outlook;end';
-    }
-    return 'https://outlook.live.com';
-  };
-
-  if (isSubmitted) {
-    return (
-      <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-bg)', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-        <div className="card" style={{
-          width: '100%',
-          maxWidth: '460px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '24px',
-          border: '2.5px double var(--color-gold)',
-          boxShadow: '0 16px 48px rgba(15, 61, 46, 0.08)',
-          padding: '40px 32px',
-          position: 'relative',
-          backgroundColor: '#FFFFFF',
-          textAlign: 'center'
-        }}>
-          {/* Corner Ornaments */}
-          <div className="corner-ornament top-left" style={{ borderColor: 'var(--color-gold)', width: '12px', height: '12px', top: '12px', left: '12px' }}></div>
-          <div className="corner-ornament top-right" style={{ borderColor: 'var(--color-gold)', width: '12px', height: '12px', top: '12px', right: '12px' }}></div>
-          <div className="corner-ornament bottom-left" style={{ borderColor: 'var(--color-gold)', width: '12px', height: '12px', bottom: '12px', left: '12px' }}></div>
-          <div className="corner-ornament bottom-right" style={{ borderColor: 'var(--color-gold)', width: '12px', height: '12px', bottom: '12px', right: '12px' }}></div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-            <div style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              backgroundColor: 'rgba(15, 61, 46, 0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-primary)',
-              animation: 'pulse 2s infinite'
-            }}>
-              <Mail size={32} />
-            </div>
-            <h2 className="text-serif" style={{ fontSize: '24px', color: 'var(--color-primary)', fontWeight: '800' }}>
-              Kiểm tra hộp thư của Cha
-            </h2>
-            <p style={{ fontSize: '14px', color: 'var(--color-text-dark)', lineHeight: '1.6' }}>
-              Chúng con đã gửi một liên kết kích hoạt đến email <strong style={{ color: 'var(--color-primary)' }}>{email}</strong>.
-            </p>
-            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: '1.5' }}>
-              Cha vui lòng click vào liên kết trong email để kích hoạt quyền quản trị Giáo xứ của mình.
-            </p>
-          </div>
-
-          {error && (
-            <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: 'var(--color-error)', padding: '10px', borderRadius: '8px', fontSize: '13px' }}>
-              {error}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
-            <a
-              href={getGmailUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-primary"
-              style={{ width: '100%', height: '44px', textDecoration: 'none' }}
-            >
-              Mở ứng dụng Gmail
-            </a>
-            <a
-              href={getOutlookUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-secondary"
-              style={{ width: '100%', height: '44px', textDecoration: 'none' }}
-            >
-              Mở Outlook
-            </a>
-
-            {!supabase && (
-              <button
-                onClick={handleOfflineActivate}
-                disabled={loading}
-                className="btn btn-gold"
-                style={{ width: '100%', height: '44px', marginTop: '12px' }}
-              >
-                {loading ? <Loader className="animate-spin" size={18} /> : 'Kích hoạt ngay (Offline Dev)'}
-              </button>
-            )}
-          </div>
-
-          <div style={{ textAlign: 'center', fontSize: '13px', color: 'var(--color-text-muted)', borderTop: '1px solid rgba(15, 61, 46, 0.08)', paddingTop: '16px', marginTop: '8px' }}>
-            <button
-              onClick={() => setIsSubmitted(false)}
-              style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontWeight: '600', textDecoration: 'underline', cursor: 'pointer' }}
-            >
-              Quay lại trang đăng ký
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-bg)', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
@@ -425,6 +311,39 @@ export const RegisterPage: React.FC = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="password" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+              Mật khẩu truy cập
+            </label>
+            <input
+              id="password"
+              type="password"
+              className="form-control"
+              placeholder="Nhập ít nhất 6 ký tự"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)' }}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="invitationCode" style={{ color: 'var(--color-primary)', fontWeight: '600' }}>
+              Mã mời xác thực (2FA)
+            </label>
+            <input
+              id="invitationCode"
+              type="text"
+              className="form-control"
+              placeholder="Nhập mã mời 6 chữ số từ Admin"
+              maxLength={6}
+              value={invitationCode}
+              onChange={(e) => setInvitationCode(e.target.value.replace(/[^0-9]/g, ''))}
+              required
+              style={{ height: '44px', border: '1.5px solid rgba(15, 61, 46, 0.15)', letterSpacing: '2px', textAlign: 'center', fontSize: '18px', fontWeight: 'bold' }}
             />
           </div>
 
