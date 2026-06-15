@@ -257,7 +257,6 @@ export const ParishionerWheel: React.FC = () => {
   const [winnerBlessing, setWinnerBlessing] = useState<Blessing | null>(null);
   const [showWinnerModal, setShowWinnerModal] = useState(false);
   const [lockedBlessing, setLockedBlessing] = useState<LockedBlessing | null>(null);
-  const [isAdClosed, setIsAdClosed] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const [cachedBgUrl, setCachedBgUrl] = useState<string>('');
@@ -1268,13 +1267,22 @@ export const ParishionerWheel: React.FC = () => {
         el.style.width = '430px';
         el.style.maxWidth = '430px';
 
+        // Allow layout reflow to complete before measuring offsetHeight
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
         const canvas = await html2canvas(el, {
           useCORS: true,
           backgroundColor: null,
           scale: 3,
           logging: false,
+          width: 430,
+          height: el.offsetHeight,
           windowWidth: 430,
-          windowHeight: el.offsetHeight
+          windowHeight: el.offsetHeight,
+          scrollX: 0,
+          scrollY: 0,
+          x: 0,
+          y: 0
         });
         el.style.width = origWidth;
         el.style.maxWidth = origMaxWidth;
@@ -1326,8 +1334,8 @@ export const ParishionerWheel: React.FC = () => {
           padding: '12px',
           display: 'flex',
           flexDirection: 'column',
-          width: '100%',
-          maxWidth: '430px',
+          width: isMobile ? '95%' : '100%',
+          maxWidth: isMobile ? '95%' : '430px',
           position: isModal ? 'relative' : undefined,
           flexShrink: isModal ? undefined : 0,
           flex: isModal ? undefined : 1,
@@ -1897,6 +1905,8 @@ export const ParishionerWheel: React.FC = () => {
             position: 'fixed',
             left: 0,
             top: 0,
+            width: '430px',
+            height: 'auto',
             zIndex: -9999,
             opacity: 0,
             pointerEvents: 'none',
@@ -2229,7 +2239,7 @@ export const ParishionerWheel: React.FC = () => {
               padding: '12px',
               display: 'flex',
               flexDirection: 'column',
-              width: '100%',
+              width: isMobile ? '95%' : '100%',
               boxSizing: 'border-box'
             }}
           >
@@ -2464,8 +2474,7 @@ export const ParishionerWheel: React.FC = () => {
           maxWidth: isDesktop 
             ? (showWinnerModal && winnerBlessing ? '1000px' : '540px')
             : '500px',
-          margin: '0 auto',
-          paddingBottom: isAdClosed ? '0' : '60px'
+          margin: '0 auto'
         }}
       >
         {/* Wheel Card wrapper (Holy Card) */}
@@ -2845,52 +2854,6 @@ export const ParishionerWheel: React.FC = () => {
       {/* Render winner modal overlay on mobile viewports */}
       {isMobile && showWinnerModal && winnerBlessing && renderBlessingCard(true)}
 
-      {/* Footer Banner Promotion (Graceful footer banner) */}
-      {!isAdClosed && (
-        <div className="footer-ad-banner" style={{ borderTopColor: getThemeColors(wheel.theme_preset)[1] }}>
-          <div className="ad-content">
-            <img 
-              src="/logo-giochacho.webp" 
-              alt="Giờ Cha Chờ" 
-              style={{ 
-                width: '28px', 
-                height: '28px', 
-                borderRadius: '6px', 
-                objectFit: 'contain',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                border: '1px solid rgba(255,255,255,0.25)',
-                flexShrink: 0
-              }} 
-            />
-            <span className="ad-text">Đồng hành cùng đức tin Công giáo. Tìm nhanh giờ Thánh Lễ & Giờ Xưng Tội gần nhất.</span>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-              <a
-                href="https://apps.apple.com/vn/app/gi%E1%BB%9D-cha-ch%E1%BB%9D/id6760563537"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ad-link-btn"
-                style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--color-gold)', textDecoration: 'none', borderBottom: '1px solid var(--color-gold)', whiteSpace: 'nowrap' }}
-              >
-                Tải iOS
-              </a>
-              <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px' }}>|</span>
-              <a
-                href="https://play.google.com/store/apps/details?id=com.anonymous.churchfindernative&pcampaignid=web_share"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ad-link-btn"
-                style={{ fontSize: '12.5px', fontWeight: '700', color: 'var(--color-gold)', textDecoration: 'none', borderBottom: '1px solid var(--color-gold)', whiteSpace: 'nowrap' }}
-              >
-                Tải Android
-              </a>
-            </div>
-            <button onClick={() => setIsAdClosed(true)} className="ad-close-btn" title="Đóng quảng cáo">
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Toast popup */}
       {toast && <div className="toast-notification">{toast}</div>}
 
@@ -2908,7 +2871,7 @@ export const ParishionerWheel: React.FC = () => {
             title={isBgmMuted ? "Bật nhạc nền Thánh ca" : "Tắt nhạc nền"}
             style={{
               position: 'fixed',
-              bottom: isAdClosed ? '24px' : '82px',
+              bottom: '24px',
               right: '24px',
               width: '46px',
               height: '46px',
