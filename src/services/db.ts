@@ -1555,25 +1555,33 @@ export const dbService = {
         return URL.createObjectURL(blob);
       }
 
-      // If not cached, fetch and cache it
-      const response = await fetch(url, { mode: 'cors' });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch asset: ${response.statusText}`);
-      }
-      const fetchedBlob = await response.blob();
-      
-      // Save to IndexedDB
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction('asset_cache', 'readwrite');
-        const store = tx.objectStore('asset_cache');
-        const request = store.put(fetchedBlob, url);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-      });
+      // If not cached, fetch and cache it in the background
+      // Do not await the fetch! Just return the original URL immediately.
+      // This allows the browser to stream the media instantly without stalling the UI.
+      fetch(url, { mode: 'cors' })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Failed to fetch asset: ${response.statusText}`);
+          }
+          return response.blob();
+        })
+        .then(fetchedBlob => {
+          // Save to IndexedDB
+          return new Promise<void>((resolve, reject) => {
+            const tx = db.transaction('asset_cache', 'readwrite');
+            const store = tx.objectStore('asset_cache');
+            const request = store.put(fetchedBlob, url);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+          });
+        })
+        .catch(err => {
+          console.warn(`Background caching failed for ${url}:`, err);
+        });
 
-      return URL.createObjectURL(fetchedBlob);
+      return url;
     } catch (err) {
-      console.warn(`Asset cache failed for ${url}, falling back to original:`, err);
+      console.warn(`Asset cache check failed for ${url}, falling back to original:`, err);
       return url;
     }
   },

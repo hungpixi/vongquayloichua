@@ -10,16 +10,17 @@ export interface SfxOption {
 }
 
 export const BGM_OPTIONS: BgmOption[] = [
-  { id: 'schubert-ave-maria', name: 'Ave Maria (Schubert) - Vocal/Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/6/6f/Franz_Schubert_-_Ellens_dritter_Gesang.oga' },
-  { id: 'gounod-ave-maria', name: 'Ave Maria (Gounod) - Cello/Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/JOHN_MICHEL_CELLO-BACH_AVE_MARIA.ogg' },
-  { id: 'canon-in-d', name: 'Canon in D (Pachelbel) - Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/6/62/Pachelbel%27s_Canon.ogg' },
-  { id: 'silent-night', name: 'Silent Night (Đêm Thánh) - Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Silent_Night_%28Kevin_MacLeod%29_%28ISRC_USUAN1100075%29.oga' },
-  { id: 'jingle-bells', name: 'Jingle Bells (Chuông ngân) - Celesta', url: 'https://upload.wikimedia.org/wikipedia/commons/9/9b/Jingle_Bells_%28Calm%29.ogg' },
-  { id: 'amazing-grace', name: 'Amazing Grace - Organ phụng vụ', url: 'https://upload.wikimedia.org/wikipedia/commons/8/88/Amazing_Grace-organ.ogg' },
-  { id: 'church-bells-joy', name: 'Tiếng chuông giáo đường reo mừng', url: 'https://upload.wikimedia.org/wikipedia/commons/b/b3/Bells_of_St_Peter%27s%2C_Bebington.ogg' },
-  { id: 'bach-cello-suite', name: 'Tĩnh niệm Lời Chúa - Cello Suite', url: 'https://upload.wikimedia.org/wikipedia/commons/2/2a/JOHN_MICHEL_CELLO-J.S.BACH_CELLO_SUITE_1_in_G_Prelude_BWV_1007.ogg' },
-  { id: 'hallelujah-organ', name: 'Hallelujah Chorus - Hợp xướng', url: 'https://upload.wikimedia.org/wikipedia/commons/2/25/Handel_-_messiah_-_44_hallelujah.ogg' },
-  { id: 'morning-prayer', name: 'Kinh Nguyện Ban Mai - Hòa tấu', url: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Mozart_-_Eine_kleine_Nachtmusik_-_1._Allegro.ogg' }
+  { id: 'default-bgm', name: 'Nhạc nền Giờ Cha Chờ (Mặc định - Tải cực nhanh)', url: '/audio/bg-music.mp3' },
+  { id: 'schubert-ave-maria', name: 'Ave Maria (Schubert) - Vocal/Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/6f/Franz_Schubert_-_Ellens_dritter_Gesang.oga/Franz_Schubert_-_Ellens_dritter_Gesang.oga.mp3' },
+  { id: 'gounod-ave-maria', name: 'Ave Maria (Gounod) - Cello/Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/d/d4/JOHN_MICHEL_CELLO-BACH_AVE_MARIA.ogg/JOHN_MICHEL_CELLO-BACH_AVE_MARIA.ogg.mp3' },
+  { id: 'canon-in-d', name: 'Canon in D (Pachelbel) - Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/6/62/Pachelbel%27s_Canon.ogg/Pachelbel%27s_Canon.ogg.mp3' },
+  { id: 'silent-night', name: 'Silent Night (Đêm Thánh) - Piano', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/2/24/Silent_Night_%28Kevin_MacLeod%29_%28ISRC_USUAN1100075%29.oga/Silent_Night_%28Kevin_MacLeod%29_%28ISRC_USUAN1100075%29.oga.mp3' },
+  { id: 'jingle-bells', name: 'Jingle Bells (Chuông ngân) - Celesta', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/5/54/Jingle_Bells_%28Calm%29.ogg/Jingle_Bells_%28Calm%29.ogg.mp3' },
+  { id: 'amazing-grace', name: 'Amazing Grace - Organ phụng vụ', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/8/88/Amazing_Grace-organ.ogg/Amazing_Grace-organ.ogg.mp3' },
+  { id: 'church-bells-joy', name: 'Tiếng chuông giáo đường reo mừng', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/7/78/Bells_of_St_Peter%27s%2C_Bebington.ogg/Bells_of_St_Peter%27s%2C_Bebington.ogg.mp3' },
+  { id: 'bach-cello-suite', name: 'Tĩnh niệm Lời Chúa - Cello Suite', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/4/43/JOHN_MICHEL_CELLO-J_S_BACH_CELLO_SUITE_1_in_G_Prelude.ogg/JOHN_MICHEL_CELLO-J_S_BACH_CELLO_SUITE_1_in_G_Prelude.ogg.mp3' },
+  { id: 'hallelujah-organ', name: 'Hallelujah Chorus - Hợp xướng', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/c/ce/Handel_-_messiah_-_44_hallelujah.ogg/Handel_-_messiah_-_44_hallelujah.ogg.mp3' },
+  { id: 'morning-prayer', name: 'Kinh Nguyện Ban Mai - Hòa tấu', url: 'https://upload.wikimedia.org/wikipedia/commons/transcoded/2/24/Mozart_-_Eine_kleine_Nachtmusik_-_1._Allegro.ogg/Mozart_-_Eine_kleine_Nachtmusik_-_1._Allegro.ogg.mp3' }
 ];
 
 export const SPIN_SFX_OPTIONS: SfxOption[] = [
