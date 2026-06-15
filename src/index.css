@@ -878,7 +878,9 @@ h1, h2, h3, h4 {
     }
     
     .builder-grid {
-        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column-reverse;
+        gap: 24px;
     }
     
     .dashboard-summary-grid {
@@ -923,6 +925,65 @@ h1, h2, h3, h4 {
     .spin-center-btn {
         width: 68px;
         height: 68px;
+    }
+
+    .admin-header {
+        padding: 8px 12px !important;
+        height: auto !important;
+        min-height: 60px;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: space-between;
+    }
+    .admin-header h2 {
+        font-size: 15px !important;
+    }
+    .header-save-btn span {
+        display: none;
+    }
+    .header-save-btn {
+        padding: 8px 12px !important;
+    }
+}
+
+/* Sticky Save Bar */
+.sticky-save-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(216, 180, 63, 0.25);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 500;
+    box-shadow: 0 -8px 32px rgba(8, 27, 21, 0.08);
+    transition: all 0.2s ease-in-out;
+}
+
+@media (min-width: 993px) {
+    .sticky-save-bar {
+        bottom: 20px;
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: calc(100% - 40px);
+        max-width: 1200px;
+        border: 1px solid rgba(216, 180, 63, 0.25);
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(8, 27, 21, 0.12);
+    }
+}
+@media (max-width: 768px) {
+    .sticky-save-bar {
+        padding: 10px 16px;
+    }
+    .sticky-save-bar-title {
+        display: none;
     }
 }
 

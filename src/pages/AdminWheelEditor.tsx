@@ -1791,14 +1791,14 @@ export const AdminWheelEditor: React.FC = () => {
           </div>
         </div>
 
-        <button onClick={handleSaveConfig} className="btn btn-primary btn-gold" style={{ gap: '6px' }} disabled={saveLoading}>
+        <button onClick={handleSaveConfig} className="btn btn-primary btn-gold header-save-btn" style={{ gap: '6px' }} disabled={saveLoading}>
           {saveLoading ? <Loader className="animate-spin" size={16} /> : <Save size={16} />}
           <span>Lưu Cấu Hình</span>
         </button>
       </header>
 
       {/* Workspace Area */}
-      <main className="container" style={{ padding: '24px 16px', flex: 1 }}>
+      <main className="container" style={{ padding: '24px 16px', paddingBottom: '96px', flex: 1 }}>
         {hasDraft && (
           <div style={{
             background: 'rgba(216, 180, 63, 0.08)',
@@ -2166,6 +2166,20 @@ export const AdminWheelEditor: React.FC = () => {
                   />
                   <span>Bật âm thanh (tick-tick/chuông) khi quay</span>
                 </label>
+              </div>
+
+              {/* Button Save inside Card */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', paddingTop: '16px', borderTop: '1px dashed rgba(15, 61, 46, 0.08)' }}>
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  className="btn btn-primary btn-gold"
+                  style={{ gap: '8px', padding: '10px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  disabled={saveLoading}
+                >
+                  {saveLoading ? <Loader className="animate-spin" size={14} /> : <Save size={14} />}
+                  <span>Lưu cấu hình</span>
+                </button>
               </div>
             </div>
 
@@ -3596,6 +3610,42 @@ export const AdminWheelEditor: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Sticky Save Bar */}
+      <div className="sticky-save-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }} className="sticky-save-bar-title">
+          <span style={{ fontSize: '13px', color: 'var(--color-primary)', fontWeight: '600' }}>
+            Vòng quay: <strong>{title || wheel.title}</strong>
+          </span>
+          {hasDraft && (
+            <span style={{ fontSize: '11px', backgroundColor: 'rgba(216, 180, 63, 0.15)', color: 'var(--color-gold)', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' }}>
+              Có bản nháp chưa lưu
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '12px', width: '100%', justifyContent: 'flex-end', maxWidth: '400px' }}>
+          <button
+            onClick={handleSaveConfig}
+            className="btn btn-primary btn-gold"
+            style={{
+              gap: '8px',
+              flex: 1,
+              height: '42px',
+              fontSize: '14px',
+              fontWeight: '700',
+              borderRadius: '10px',
+              justifyContent: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              cursor: 'pointer'
+            }}
+            disabled={saveLoading}
+          >
+            {saveLoading ? <Loader className="animate-spin" size={16} /> : <Save size={16} />}
+            <span>Lưu cấu hình</span>
+          </button>
+        </div>
+      </div>
 
       {/* Toast notifications */}
       {toast && (
