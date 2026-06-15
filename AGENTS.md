@@ -77,18 +77,24 @@ Các quy tắc dưới đây áp dụng cho mọi tác vụ trong dự án này.
 
 ---
 
-## 🚀 QUY TẮC BỔ SUNG ĐẶC BIỆT: TỰ ĐỘNG COMMIT & PUSH GIAO HẠN VERCEL (CI/CD)
+## 🚀 QUY TẮC BỔ SUNG ĐẶC BIỆT: TỰ ĐỘNG COMMIT, PUSH & TỰ ĐỘNG ROLLBACK (CI/CD CHO NGƯỜI DÙNG KHÔNG BIẾT CODE)
 
-Để hệ thống Vercel tự động nhận cập nhật liên tục:
-1. **Kiểm tra biên dịch**: Trước khi commit, phải đảm bảo dự án build thành công ở máy local bằng cách chạy lệnh:
+Để đảm bảo hệ thống luôn hoạt động ổn định và người dùng không gặp lỗi biên dịch:
+1. **Kiểm tra biên dịch bắt buộc**: Trước khi thực hiện bất kỳ hoạt động commit nào, AI Agent phải luôn chạy lệnh kiểm tra biên dịch ở máy local:
    ```powershell
    npm run build
    ```
-2. **Auto Git Commit & Push**:
-   - Khi bất kỳ thay đổi nào của tệp nguồn (src/, public/, api/,...) được hoàn tất và biên dịch thành công mà không có lỗi, AI Agent **phải tự động đề xuất chạy chuỗi lệnh Git** để đồng bộ nhanh chóng lên GitHub:
+2. **Tự động Commit & Push khi thành công**:
+   - Nếu biên dịch thành công không có lỗi, AI Agent **phải thực hiện ngay lập tức** (hoặc tự động đề xuất chạy) chuỗi lệnh Git để đẩy code lên GitHub mà không cần người dùng tự gõ lệnh:
      ```powershell
      git add .
      git commit -m "feat/fix: [Mô tả ngắn gọn thay đổi thực tế]"
      git push origin main
      ```
-   - *Lưu ý*: commit chỉ các tệp tin mã nguồn có liên quan đến tính năng đang thực thi. Tránh commit các file log nháp hoặc file trích xuất tạm.
+3. **Tự động Rollback (Khôi phục) khi gặp lỗi**:
+   - Nếu quá trình biên dịch (`npm run build`) gặp lỗi và AI Agent không thể khắc phục thành công ngay trong lượt xử lý đó, **bắt buộc phải tự động rollback** toàn bộ các tệp tin thay đổi về trạng thái hoạt động tốt gần nhất bằng lệnh:
+     ```powershell
+     git reset --hard HEAD
+     git clean -fd
+     ```
+   - Tuyệt đối không để lại dự án trong trạng thái lỗi biên dịch/hỏng code, vì người dùng là người mới bắt đầu và không biết về lập trình để tự sửa lỗi.
